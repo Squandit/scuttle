@@ -1,0 +1,12 @@
+[package]
+name = "scuttle-launcher"
+description = "Search providers and ranking behind the Scuttle launcher"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+scuttle-core.workspace = true
+nucleo-matcher = "0.3"

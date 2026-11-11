@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/scuttle-core",
+    "crates/scuttle-hypr",
+    "crates/scuttle-launcher",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Squandit/scuttle"
+rust-version = "1.85"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+scuttle-core = { path = "crates/scuttle-core" }
+scuttle-hypr = { path = "crates/scuttle-hypr" }
+scuttle-launcher = { path = "crates/scuttle-launcher" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true
+panic = "abort"
+
+[profile.dev]
+# GTK itself is already optimised; keep our own code quick to rebuild.
+debug = "line-tables-only"
