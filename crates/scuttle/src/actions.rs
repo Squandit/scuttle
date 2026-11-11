@@ -107,6 +107,42 @@ pub fn open_path(path: &Path, hypr: Option<&Hyprland>) -> Result<(), String> {
     open(&path.to_string_lossy(), hypr)
 }
 
+/// Puts a remembered clipboard entry back on the clipboard. `line` is
+/// the entry's line from `cliphist list`.
+pub fn restore_clip(line: &str) -> Result<(), String> {
+    use std::io::Write;
+
+    let mut decode = Command::new("cliphist")
+        .arg("decode")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "Clipboard history needs cliphist, which is not installed.".to_string())?;
+    if let Some(mut stdin) = decode.stdin.take() {
+        // cliphist reads the chosen line and looks the entry up by its id.
+        let _ = stdin.write_all(line.as_bytes());
+    }
+    let Some(decoded) = decode.stdout.take() else {
+        return Err("Could not read the entry from cliphist.".into());
+    };
+    // wl-copy takes the data on stdin and keeps serving it in the
+    // background, so this returns as soon as it has read everything.
+    let copied = Command::new("wl-copy")
+        .stdin(decoded)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    let _ = decode.wait();
+    match copied {
+        Ok(status) if status.success() => Ok(()),
+        Ok(_) => Err("wl-copy could not take the entry.".into()),
+        Err(_) => {
+            Err("Restoring from history needs wl-copy, from the wl-clipboard package.".into())
+        }
+    }
+}
+
 /// Ends the desktop session.
 pub fn logout(hypr: Option<&Hyprland>) -> Result<(), String> {
     if let Some(hypr) = hypr {

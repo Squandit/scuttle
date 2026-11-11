@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use nucleo_matcher::{Config as MatcherConfig, Matcher};
 
 use crate::calc;
+use crate::clipboard::ClipEntry;
 use crate::desktop::{exec_command, DesktopEntry};
 use crate::files::{display_path, FileEntry};
 use crate::history::History;
@@ -27,6 +28,10 @@ pub enum Mode {
     Calc,
     /// `@` open windows.
     Windows,
+    /// `;` clipboard history.
+    Clipboard,
+    /// `:` emoji.
+    Emoji,
 }
 
 impl Mode {
@@ -39,6 +44,8 @@ impl Mode {
             Some('?') => Mode::Web,
             Some('=') => Mode::Calc,
             Some('@') => Mode::Windows,
+            Some(';') => Mode::Clipboard,
+            Some(':') => Mode::Emoji,
             _ => return (Mode::All, query.trim()),
         };
         (mode, query[1..].trim())
@@ -53,6 +60,8 @@ impl Mode {
             Mode::Web => Some("Web"),
             Mode::Calc => Some("Calculator"),
             Mode::Windows => Some("Windows"),
+            Mode::Clipboard => Some("Clipboard"),
+            Mode::Emoji => Some("Emoji"),
         }
     }
 }
@@ -157,6 +166,7 @@ pub struct Engine {
     apps: Vec<DesktopEntry>,
     windows: Vec<WindowInfo>,
     files: Vec<FileEntry>,
+    clipboard: Vec<ClipEntry>,
     history: History,
     web_template: String,
     max_results: usize,
@@ -171,6 +181,7 @@ impl Engine {
             apps: Vec::new(),
             windows: Vec::new(),
             files: Vec::new(),
+            clipboard: Vec::new(),
             history,
             web_template: web_template.to_string(),
             max_results: max_results.max(1),
@@ -192,6 +203,11 @@ impl Engine {
         self.files = files;
     }
 
+    /// Replaces the clipboard history, newest first.
+    pub fn set_clipboard(&mut self, entries: Vec<ClipEntry>) {
+        self.clipboard = entries;
+    }
+
     pub fn set_options(&mut self, web_template: &str, max_results: usize) {
         self.web_template = web_template.to_string();
         self.max_results = max_results.max(1);
@@ -200,7 +216,10 @@ impl Engine {
     /// Notes that a result was chosen, so it ranks higher next time.
     pub fn record_use(&mut self, item: &Item, now: u64) {
         // Windows and one-off results are not worth remembering.
-        if matches!(item.kind, Kind::App | Kind::System | Kind::File) {
+        if matches!(
+            item.kind,
+            Kind::App | Kind::System | Kind::File | Kind::Emoji
+        ) {
             self.history.record(&item.key, now);
             let _ = self.history.save(now);
         }
@@ -221,6 +240,8 @@ impl Engine {
                 Mode::All => self.frequent_apps(now, limit),
                 Mode::Windows => self.all_windows(limit),
                 Mode::System => self.all_system(limit),
+                Mode::Clipboard => self.recent_clipboard(limit),
+                Mode::Emoji => self.frequent_emoji(now, limit),
                 Mode::Files | Mode::Web | Mode::Calc => Vec::new(),
             };
         }
@@ -231,6 +252,8 @@ impl Engine {
             Mode::System => settle_alone(self.match_system(text), limit),
             Mode::Windows => settle_alone(self.match_windows(text), limit),
             Mode::Files => settle_alone(self.match_files(text), limit),
+            Mode::Clipboard => settle_alone(self.match_clipboard(text), limit),
+            Mode::Emoji => settle_alone(self.match_emoji(text, now), limit),
             Mode::All => {
                 let mut candidates = vec![
                     (self.match_apps(text, now), APP_CAP),
@@ -435,6 +458,103 @@ impl Engine {
             };
             items.push(Scored {
                 item,
+                strict: m.strict,
+            });
+        }
+        items
+    }
+
+    fn clip_item(entry: &ClipEntry, score: u32) -> Item {
+        Item {
+            kind: Kind::Clipboard,
+            title: entry.preview.clone(),
+            subtitle: String::new(),
+            icon: Some(
+                if entry.is_image {
+                    "image-x-generic-symbolic"
+                } else {
+                    "edit-paste-symbolic"
+                }
+                .into(),
+            ),
+            action: Action::RestoreClip(entry.line.clone()),
+            confirm: false,
+            key: "clip".into(),
+            score,
+        }
+    }
+
+    fn recent_clipboard(&self, limit: usize) -> Vec<Item> {
+        self.clipboard
+            .iter()
+            .take(limit)
+            .map(|e| Self::clip_item(e, 0))
+            .collect()
+    }
+
+    fn match_clipboard(&mut self, text: &str) -> Vec<Scored> {
+        let query = Query::new(text);
+        let mut items = Vec::new();
+        // Entries are newest first. A small bonus for recency settles
+        // ties between equally good matches.
+        for (age, entry) in self.clipboard.iter().enumerate() {
+            if let Some(m) = query.score(&entry.preview, &mut self.matcher) {
+                let recency = 20u32.saturating_sub(age as u32);
+                items.push(Scored {
+                    item: Self::clip_item(entry, m.score + recency),
+                    strict: m.strict,
+                });
+            }
+        }
+        items
+    }
+
+    fn emoji_item(emoji: crate::emoji::Emoji, score: u32) -> Item {
+        Item {
+            kind: Kind::Emoji,
+            title: format!(
+                "{}  {}",
+                emoji.character,
+                crate::emoji::display_name(emoji.name)
+            ),
+            subtitle: String::new(),
+            icon: None,
+            action: Action::Copy(emoji.character.to_string()),
+            confirm: false,
+            key: format!("emoji:{}", emoji.name),
+            score,
+        }
+    }
+
+    /// With nothing typed, the emoji used most and most recently come
+    /// first, then the rest in Unicode's order.
+    fn frequent_emoji(&self, now: u64, limit: usize) -> Vec<Item> {
+        let mut items: Vec<Item> = crate::emoji::all()
+            .map(|e| Self::emoji_item(e, self.history.boost(&format!("emoji:{}", e.name), now)))
+            .collect();
+        items.sort_by_key(|i| std::cmp::Reverse(i.score));
+        items.truncate(limit);
+        items
+    }
+
+    fn match_emoji(&mut self, text: &str, now: u64) -> Vec<Scored> {
+        let query = Query::new(text);
+        let lowered = text.to_lowercase();
+        let mut items = Vec::new();
+        for emoji in crate::emoji::all() {
+            let Some(m) = query.score(emoji.name, &mut self.matcher) else {
+                continue;
+            };
+            let mut score = m.score;
+            // "fire" should find fire before firefighter.
+            if emoji.name == lowered {
+                score += 100;
+            } else if emoji.name.starts_with(&lowered) {
+                score += 40;
+            }
+            score += self.history.boost(&format!("emoji:{}", emoji.name), now);
+            items.push(Scored {
+                item: Self::emoji_item(emoji, score),
                 strict: m.strict,
             });
         }
@@ -706,6 +826,8 @@ mod tests {
         assert_eq!(Mode::parse("? rust"), (Mode::Web, "rust"));
         assert_eq!(Mode::parse("=2+2"), (Mode::Calc, "2+2"));
         assert_eq!(Mode::parse("@wiki"), (Mode::Windows, "wiki"));
+        assert_eq!(Mode::parse(";token"), (Mode::Clipboard, "token"));
+        assert_eq!(Mode::parse(": fire"), (Mode::Emoji, "fire"));
         assert_eq!(Mode::parse(""), (Mode::All, ""));
     }
 
@@ -891,6 +1013,76 @@ mod tests {
         e.set_windows(Vec::new());
         e.set_apps(vec![app("firefox", "Firefox", "Web Browser", &[])]);
         assert_eq!(e.search("frfx", NOW)[0].title, "Firefox");
+    }
+
+    #[test]
+    fn emoji_mode_finds_emoji_by_name() {
+        let mut e = engine();
+        let items = e.search(":fire", NOW);
+        assert_eq!(items[0].title, "🔥  Fire");
+        assert_eq!(items[0].action, Action::Copy("🔥".into()));
+        assert!(items.iter().all(|i| i.kind == Kind::Emoji));
+        assert!(items.len() <= 8);
+        assert_eq!(e.search(":crab", NOW)[0].title, "🦀  Crab");
+        assert_eq!(e.search(": thumbs up", NOW)[0].title, "👍  Thumbs up");
+    }
+
+    #[test]
+    fn empty_emoji_mode_shows_smileys_then_learns_favourites() {
+        let mut e = engine();
+        assert_eq!(e.search(":", NOW)[0].title, "😀  Grinning face");
+        let crab = e.search(":crab", NOW).remove(0);
+        e.record_use(&crab, NOW);
+        assert_eq!(e.search(":", NOW)[0].title, "🦀  Crab");
+    }
+
+    #[test]
+    fn emoji_only_appear_in_their_own_mode() {
+        let items = engine().search("fire", NOW);
+        assert!(items.iter().all(|i| i.kind != Kind::Emoji));
+    }
+
+    #[test]
+    fn clipboard_mode_lists_and_searches_history() {
+        let mut e = engine();
+        e.set_clipboard(crate::clipboard::parse_list(
+            "9\tcargo run -p scuttle\n8\t[[ binary data 12 KiB png 800x600 ]]\n7\thttps://wiki.hypr.land\n",
+        ));
+        let all = e.search(";", NOW);
+        assert_eq!(
+            titles(&all),
+            vec![
+                "cargo run -p scuttle",
+                "Image, 800x600 png, 12 KiB",
+                "https://wiki.hypr.land"
+            ]
+        );
+        assert!(all.iter().all(|i| i.kind == Kind::Clipboard));
+
+        let found = e.search(";hypr", NOW);
+        assert_eq!(titles(&found), vec!["https://wiki.hypr.land"]);
+        assert_eq!(
+            found[0].action,
+            Action::RestoreClip("7\thttps://wiki.hypr.land".into())
+        );
+        assert_eq!(
+            titles(&e.search("; image", NOW)),
+            vec!["Image, 800x600 png, 12 KiB"]
+        );
+    }
+
+    #[test]
+    fn clipboard_entries_stay_out_of_normal_search() {
+        let mut e = engine();
+        e.set_clipboard(crate::clipboard::parse_list("9\tfirefox secret token\n"));
+        let items = e.search("fire", NOW);
+        assert!(items.iter().all(|i| i.kind != Kind::Clipboard));
+    }
+
+    #[test]
+    fn empty_clipboard_history_is_just_empty() {
+        assert!(engine().search(";", NOW).is_empty());
+        assert!(engine().search(";anything", NOW).is_empty());
     }
 
     #[test]

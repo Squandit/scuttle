@@ -6,7 +6,9 @@
 //! list of [`Item`]s, each carrying an [`Action`] for the shell to run.
 
 pub mod calc;
+pub mod clipboard;
 pub mod desktop;
+pub mod emoji;
 pub mod engine;
 pub mod files;
 pub mod history;

@@ -10,6 +10,8 @@ pub enum Kind {
     Window,
     System,
     File,
+    Clipboard,
+    Emoji,
     Web,
 }
 
@@ -22,6 +24,8 @@ impl Kind {
             Kind::Window => "Windows",
             Kind::System => "System",
             Kind::File => "Files",
+            Kind::Clipboard => "Clipboard",
+            Kind::Emoji => "Emoji",
             Kind::Web => "Web",
         }
     }
@@ -59,6 +63,9 @@ pub enum Action {
     OpenUrl(String),
     /// Put text on the clipboard.
     Copy(String),
+    /// Put a remembered clipboard entry back on the clipboard. The
+    /// value is the entry's line from `cliphist list`.
+    RestoreClip(String),
     /// Run a shell command.
     Shell(String),
     Internal(Internal),

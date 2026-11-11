@@ -11,6 +11,10 @@ end)
 -- key still works as a normal keybind.
 hl.bind("Super_L", hl.dsp.exec_cmd("scuttle toggle launcher"), { release = true })
 
+-- Clipboard history and the emoji picker open as launcher modes.
+hl.bind("SUPER + V", hl.dsp.exec_cmd("scuttle launcher ';'"))
+hl.bind("SUPER + period", hl.dsp.exec_cmd("scuttle launcher ':'"))
+
 -- Volume and brightness keys. "locked" lets them work on the lock
 -- screen and "repeating" lets you hold them down.
 local held = { repeating = true, locked = true }

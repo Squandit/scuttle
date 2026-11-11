@@ -11,11 +11,12 @@ use gtk::{gdk, glib, pango};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use scuttle_core::config::{BarPosition, Config};
 use scuttle_hypr::{Dispatch, Hyprland};
+use scuttle_launcher::clipboard::ClipEntry;
 use scuttle_launcher::desktop::DesktopEntry;
 use scuttle_launcher::engine::pretty_class;
 use scuttle_launcher::files::FileEntry;
 use scuttle_launcher::history::History;
-use scuttle_launcher::{Action, Engine, Internal, Item, Mode, WindowInfo};
+use scuttle_launcher::{Action, Engine, Internal, Item, Kind, Mode, WindowInfo};
 use scuttle_sound::{Feedback, Sound};
 
 use crate::actions;
@@ -49,6 +50,7 @@ pub fn describe(action: &Action) -> (&'static str, String) {
         Action::OpenPath(path) => ("Open", path.display().to_string()),
         Action::OpenUrl(url) => ("Open in the browser", url.clone()),
         Action::Copy(text) => ("Copy to the clipboard", text.clone()),
+        Action::RestoreClip(_) => ("Copy back to the clipboard", String::new()),
         Action::Shell(command) => ("Run", command.clone()),
         Action::Internal(Internal::Reload) => ("Re-read config.toml", String::new()),
         Action::Internal(Internal::Quit) => ("Stop Scuttle", String::new()),
@@ -91,6 +93,10 @@ struct Inner {
     open: Cell<bool>,
     /// Rows animate in once, when the overlay opens, not on every key.
     animate_rows: Cell<bool>,
+    /// The clipboard history has been asked for since the overlay
+    /// opened, so it is not fetched again on every key press.
+    clipboard_requested: Cell<bool>,
+    on_clipboard_wanted: RefCell<Option<Box<dyn Fn()>>>,
     exit_ms: Cell<u32>,
     hide_timer: RefCell<Option<glib::SourceId>>,
     terminal: RefCell<String>,
@@ -214,7 +220,9 @@ impl Overlay {
         // Footer.
         let footer = gtk::Box::new(gtk::Orientation::Horizontal, px(16));
         footer.set_margin_top(px(22));
-        let prefixes = gtk::Label::new(Some("> system    / files    ? web    = calc    @ windows"));
+        let prefixes = gtk::Label::new(Some(
+            "> system   / files   ? web   = calc   @ windows   ; clipboard   : emoji",
+        ));
         prefixes.add_css_class("hint");
         prefixes.add_css_class("mono");
         prefixes.set_xalign(0.0);
@@ -292,6 +300,8 @@ impl Overlay {
             confirming: Cell::new(None),
             open: Cell::new(false),
             animate_rows: Cell::new(false),
+            clipboard_requested: Cell::new(false),
+            on_clipboard_wanted: RefCell::new(None),
             exit_ms: Cell::new(0),
             hide_timer: RefCell::new(None),
             terminal: RefCell::new(String::new()),
@@ -429,6 +439,31 @@ impl Overlay {
         self.0.engine.borrow_mut().set_apps(apps);
         if self.0.open.get() {
             self.refresh();
+        }
+    }
+
+    /// Registers what to do when the clipboard history is needed.
+    pub fn on_clipboard_wanted(&self, callback: impl Fn() + 'static) {
+        *self.0.on_clipboard_wanted.borrow_mut() = Some(Box::new(callback));
+    }
+
+    /// Receives the clipboard history, or the reason there is none.
+    pub fn set_clipboard(&self, history: Result<Vec<ClipEntry>, String>) {
+        let inner = &self.0;
+        match history {
+            Ok(entries) => {
+                inner.engine.borrow_mut().set_clipboard(entries);
+                if inner.open.get() {
+                    self.refresh();
+                }
+            }
+            Err(problem) => {
+                inner.engine.borrow_mut().set_clipboard(Vec::new());
+                if inner.open.get() {
+                    self.refresh();
+                    inner.message.set_text(&problem);
+                }
+            }
         }
     }
 
@@ -596,6 +631,7 @@ impl Overlay {
         if let Some(sound) = sound {
             inner.feedback.play(sound);
         }
+        inner.clipboard_requested.set(false);
         inner.scrim.remove_css_class("open");
         let exit = inner.exit_ms.get();
         if exit == 0 {
@@ -673,6 +709,14 @@ impl Overlay {
             None => inner.mode_chip.set_visible(false),
         }
 
+        // The first time clipboard mode is entered after opening,
+        // fetch the history. The list fills in when it arrives.
+        if mode == Mode::Clipboard && !inner.clipboard_requested.replace(true) {
+            if let Some(callback) = inner.on_clipboard_wanted.borrow().as_ref() {
+                callback();
+            }
+        }
+
         let results = inner.engine.borrow_mut().search(&query, now_secs());
         // Store the items before touching the list: adding rows calls
         // the header function, which reads them.
@@ -693,9 +737,19 @@ impl Overlay {
             inner.list.append(&row);
         }
         let has_results = !results.is_empty();
+        let typed_something = !Mode::parse(&query).1.is_empty();
+        inner.empty.set_text(match (mode, typed_something) {
+            (Mode::Clipboard, false) => "Nothing has been copied yet.",
+            (Mode::Clipboard, true) => "Nothing in the clipboard history matches.",
+            (Mode::Emoji, _) => "No emoji by that name.",
+            (Mode::Files, false) => "Type part of a file name.",
+            (Mode::Calc, _) => "Type a sum, like 12 * (3 + 4).",
+            (Mode::Web, false) => "Type what to search the web for.",
+            _ => "Nothing matches.",
+        });
         inner
             .empty
-            .set_visible(!has_results && !query.trim().is_empty());
+            .set_visible(!has_results && (mode != Mode::All || typed_something));
         inner.detail.set_visible(has_results);
         if let Some(first) = inner.list.row_at_index(0) {
             inner.list.select_row(Some(&first));
@@ -749,6 +803,8 @@ impl Overlay {
         let Some(item) = self.selected_index().and_then(|i| items.get(i)) else {
             return;
         };
+        // Emoji carry their own picture in the title.
+        inner.detail_icon.set_visible(item.kind != Kind::Emoji);
         set_icon(&inner.detail_icon, item.icon.as_deref());
         inner.detail_title.set_text(&item.title);
         inner.detail_sub.set_text(&item.subtitle);
@@ -823,6 +879,7 @@ impl Overlay {
                 inner.window.clipboard().set_text(text);
                 Ok(())
             }
+            Action::RestoreClip(line) => actions::restore_clip(line),
             Action::Shell(command) => actions::spawn_detached(command, hypr),
             Action::Internal(which) => {
                 if *which == Internal::Logout {
@@ -864,10 +921,13 @@ fn build_row(item: &Item) -> gtk::ListBoxRow {
     let content = gtk::Box::new(gtk::Orientation::Horizontal, px(12));
     content.add_css_class("result");
 
-    let icon = gtk::Image::new();
-    icon.set_pixel_size(px(20));
-    set_icon(&icon, item.icon.as_deref());
-    content.append(&icon);
+    // Emoji carry their own picture in the title.
+    if item.kind != Kind::Emoji {
+        let icon = gtk::Image::new();
+        icon.set_pixel_size(px(20));
+        set_icon(&icon, item.icon.as_deref());
+        content.append(&icon);
+    }
 
     let title = gtk::Label::new(Some(&item.title));
     title.add_css_class("result-title");
@@ -925,6 +985,11 @@ mod tests {
                 "https://x.y",
             ),
             (Action::Copy("84".into()), "Copy to the clipboard", "84"),
+            (
+                Action::RestoreClip("7\ttext".into()),
+                "Copy back to the clipboard",
+                "",
+            ),
             (
                 Action::Shell("systemctl suspend".into()),
                 "Run",

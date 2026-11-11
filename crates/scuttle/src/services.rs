@@ -182,6 +182,27 @@ pub fn watch_volume(tx: Sender<Msg>) {
     });
 }
 
+/// Reads the clipboard history from cliphist off the UI thread.
+pub fn load_clipboard(tx: Sender<Msg>) {
+    use std::process::{Command, Stdio};
+
+    thread::spawn(move || {
+        let output = Command::new("cliphist")
+            .arg("list")
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output();
+        let history = match output {
+            Ok(output) if output.status.success() => Ok(scuttle_launcher::clipboard::parse_list(
+                &String::from_utf8_lossy(&output.stdout),
+            )),
+            Ok(_) => Err("cliphist could not list the clipboard history.".to_string()),
+            Err(_) => Err("Clipboard history needs cliphist, which is not installed.".to_string()),
+        };
+        let _ = tx.send_blocking(Msg::Clipboard(history));
+    });
+}
+
 /// Scans installed applications off the UI thread.
 pub fn scan_apps(tx: Sender<Msg>) {
     thread::spawn(move || {

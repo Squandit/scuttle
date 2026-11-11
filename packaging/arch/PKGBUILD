@@ -10,6 +10,10 @@ depends=('gtk4' 'gtk4-layer-shell' 'alsa-lib' 'xdg-utils')
 makedepends=('cargo' 'git')
 optdepends=(
     'hyprland: workspaces, window titles and window switching'
+    'cliphist: clipboard history in the launcher'
+    'wl-clipboard: restore clipboard history entries'
+    'noto-fonts-emoji: the emoji picker'
+    'wireplumber: volume control (provides wpctl)'
     'libpulse: detect headphones for interface sounds (provides pactl)'
     'pipewire-alsa: route interface sounds through PipeWire'
     'otf-geist: the default interface font (AUR)'

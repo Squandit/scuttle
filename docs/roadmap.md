@@ -11,7 +11,7 @@ What is planned and not built yet, roughly in order. The README lists what works
 
 ## After that
 
-- **Clipboard history and emoji picker** as launcher modes, with image previews and pinning.
+- **Clipboard extras.** Image previews in the detail pane, pinning, and deleting an entry from the launcher.
 - **Screen capture.** Region, window and screen; record; colour picker; annotate; send a region to the assistant.
 - **Keybind editor.** Searchable list, rebind by pressing keys, conflict check, an overlay cheatsheet.
 - **Launcher extras.** Inline controls in results (a brightness slider when you type "bright"), open windows listed under an app, notification history as a mode.

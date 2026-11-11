@@ -47,6 +47,8 @@ pub enum Msg {
     Stats(Stats),
     Apps(Vec<DesktopEntry>),
     Files(Vec<FileEntry>),
+    /// The clipboard history, or why it could not be read.
+    Clipboard(Result<Vec<scuttle_launcher::clipboard::ClipEntry>, String>),
     /// The notification service reporting a change.
     Notification(scuttle_notify::Change),
     /// The notification badge on a bar was clicked.

@@ -38,7 +38,7 @@ The battery widget only appears on machines that have a battery. A desktop PC ne
 
 ## What is not built yet
 
-The lock screen, the settings app, the clipboard and emoji pickers, screen capture, and the assistant panel. These are planned in roughly that order. [docs/roadmap.md](docs/roadmap.md) has the details.
+The lock screen, the settings app, screen capture, and the assistant panel. These are planned in roughly that order. [docs/roadmap.md](docs/roadmap.md) has the details.
 
 ## Install
 
@@ -58,6 +58,8 @@ Or build it as a package, which also installs the docs and example config:
 cd packaging/arch
 makepkg -si
 ```
+
+The clipboard mode needs `cliphist` and `wl-clipboard`, and the emoji picker needs an emoji font such as `noto-fonts-emoji`. All three are in the official repos.
 
 Interface sounds use two optional packages you very likely already have on a PipeWire system: `pipewire-alsa` to play them and `libpulse` (for the `pactl` command) to tell headphones from speakers. Without them Scuttle is simply silent.
 
@@ -130,6 +132,10 @@ Start your search with one of these characters to search a single kind of thing:
 | `?` | The web | `? rust gtk4` |
 | `=` | Calculator | `= 12 * (3 + 4)` |
 | `@` | Open windows | `@wiki` |
+| `;` | Clipboard history | `;token` |
+| `:` | Emoji | `:fire` |
+
+Clipboard history comes from [cliphist](https://github.com/sentriz/cliphist), which dusky and most Hyprland setups already run. Enter puts the chosen entry back on the clipboard. Scuttle keeps no copy of its own. The emoji picker knows all 1,900 emoji by name and learns which ones you use.
 
 You do not need the `=` for a sum. Type `12 * (3 + 4)` and the answer appears first; Enter copies it. Type a web address like `archlinux.org` and Enter opens it.
 
@@ -140,6 +146,8 @@ Running `scuttle` with no arguments starts the shell. Every other command talks 
 ```sh
 scuttle toggle launcher     # open or close the launcher
 scuttle launcher "> "       # open the launcher with text already typed
+scuttle launcher ";"        # open clipboard history
+scuttle launcher ":"        # open the emoji picker
 scuttle toggle bar          # hide or show the bar
 scuttle dnd                 # toggle do not disturb (or: dnd on, dnd off)
 scuttle dismiss             # dismiss every notification on screen

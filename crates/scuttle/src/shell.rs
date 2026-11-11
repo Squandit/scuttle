@@ -209,6 +209,11 @@ impl Shell {
             reload_pending: Cell::new(false),
         });
 
+        shell.overlay.on_clipboard_wanted({
+            let tx = tx.clone();
+            move || services::load_clipboard(tx.clone())
+        });
+
         *shell.this.borrow_mut() = Rc::downgrade(&shell);
         shell.watch_palette();
 
@@ -314,6 +319,7 @@ impl Shell {
             }
             Msg::Apps(apps) => self.overlay.set_apps(apps),
             Msg::Files(files) => self.overlay.set_files(files),
+            Msg::Clipboard(history) => self.overlay.set_clipboard(history),
             Msg::NotificationsSeen => self.mark_notifications_seen(),
             Msg::Media(track) => {
                 for bar in self.bars.borrow().iter() {
