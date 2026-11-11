@@ -30,8 +30,11 @@ export SWAYSOCK="$XDG_RUNTIME_DIR/sway.sock"
 start() {
     mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
     chmod 700 "$XDG_RUNTIME_DIR"
+    # SCUTTLE_HEADLESS_BG is a colour like #1c1613 or the path of an image.
+    local bg="${SCUTTLE_HEADLESS_BG:-#1c1613}"
+    if [ -f "$bg" ]; then bg="$bg fill"; else bg="$bg solid_color"; fi
     cat > "$RUN/sway.conf" <<CONF
-output HEADLESS-1 resolution ${SCUTTLE_HEADLESS_SIZE:-1440x900} scale ${SCUTTLE_HEADLESS_SCALE:-1} bg ${SCUTTLE_HEADLESS_BG:-#1c1613} solid_color
+output HEADLESS-1 resolution ${SCUTTLE_HEADLESS_SIZE:-1440x900} scale ${SCUTTLE_HEADLESS_SCALE:-1} bg $bg
 default_border none
 gaps inner 12
 CONF

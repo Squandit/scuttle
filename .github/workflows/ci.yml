@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Format, lint and test
+    runs-on: ubuntu-latest
+    # Scuttle targets Arch, and Arch packages the GTK layer-shell
+    # library it links against, so build there.
+    container: archlinux:latest
+    steps:
+      - name: Install build dependencies
+        run: pacman -Syu --noconfirm --needed base-devel git rust gtk4 gtk4-layer-shell
+
+      - uses: actions/checkout@v4
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked

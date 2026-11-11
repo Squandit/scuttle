@@ -38,7 +38,8 @@ margin = 10
 # Which modules go where. Available: "workspaces", "title", "clock",
 # "media", "cpu", "memory", "network", "volume", "battery",
 # "notifications". The battery module only appears on machines that have
-# a battery.
+# a battery. "media", "volume" and "notifications" are not built yet and
+# show nothing for now.
 left = ["workspaces", "title"]
 center = ["clock"]
 right = ["media", "cpu", "memory", "network", "volume", "battery", "notifications"]
@@ -59,6 +60,8 @@ terminal = ""
 file_roots = ["Documents", "Downloads", "Pictures", "Desktop", "Projects"]
 
 [sound]
+# Interface sounds are not built yet. These settings are read and
+# checked, and take effect once they are.
 # When interface sounds play: "never", "headphones" or "always".
 feedback = "headphones"
 # Loudness of interface sounds, 0.0 to 1.0.

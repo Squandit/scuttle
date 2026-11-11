@@ -23,6 +23,10 @@ use scuttle_core::paths;
 /// The annotated config that `scuttle config example` prints.
 const EXAMPLE_CONFIG: &str = include_str!("../../../config/scuttle.example.toml");
 
+/// What `scuttle hyprland` prints.
+const HYPRLAND_LUA: &str = include_str!("../../../config/hyprland.lua");
+const HYPRLAND_LEGACY: &str = include_str!("../../../config/hyprland-legacy.conf");
+
 #[derive(Parser)]
 #[command(name = "scuttle", version, about = "A desktop shell for Hyprland")]
 struct Cli {
@@ -52,6 +56,12 @@ enum Command {
     Quit,
     /// Check whether the shell is running
     Ping,
+    /// Print the lines to add to your Hyprland config
+    Hyprland {
+        /// Print the older hyprland.conf syntax instead of Lua
+        #[arg(long)]
+        legacy: bool,
+    },
     /// Inspect the config file
     Config {
         #[command(subcommand)]
@@ -91,6 +101,17 @@ fn main() -> ExitCode {
     let request = match cli.command.unwrap_or(Command::Run) {
         Command::Run => return run(config_path),
         Command::Config { action } => return config_command(action, config_path),
+        Command::Hyprland { legacy } => {
+            print!(
+                "{}",
+                if legacy {
+                    HYPRLAND_LEGACY
+                } else {
+                    HYPRLAND_LUA
+                }
+            );
+            return ExitCode::SUCCESS;
+        }
         Command::Toggle { surface } => Request::Toggle {
             surface: surface.into(),
         },
@@ -201,6 +222,16 @@ mod tests {
             Config::default(),
             "the example must show the real defaults"
         );
+    }
+
+    #[test]
+    fn hyprland_snippets_cover_autostart_keybind_and_blur() {
+        for snippet in [HYPRLAND_LUA, HYPRLAND_LEGACY] {
+            assert!(snippet.contains("scuttle toggle launcher"));
+            assert!(snippet.contains("scuttle-bar") && snippet.contains("scuttle-launcher"));
+        }
+        assert!(HYPRLAND_LUA.contains("hl.exec_cmd(\"scuttle\")"));
+        assert!(HYPRLAND_LEGACY.contains("exec-once = scuttle"));
     }
 
     #[test]

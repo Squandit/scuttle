@@ -1,0 +1,58 @@
+# Maintainer: Scuttle contributors
+pkgname=scuttle-git
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc="A desktop shell for Hyprland: bar, launcher and more in one process"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Squandit/scuttle"
+license=('MIT')
+depends=('gtk4' 'gtk4-layer-shell' 'xdg-utils')
+makedepends=('cargo' 'git')
+optdepends=(
+    'hyprland: workspaces, window titles and window switching'
+    'otf-geist: the default interface font (AUR)'
+    'otf-geist-mono: the default monospace font (AUR)'
+    'ttf-sora: the default display font (AUR)'
+    'inter-font: a good fallback when Geist is not installed'
+)
+provides=('scuttle')
+conflicts=('scuttle')
+source=("scuttle::git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd scuttle
+    printf "%s.r%s.g%s" \
+        "$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)" \
+        "$(git rev-list --count HEAD)" \
+        "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+    cd scuttle
+    export RUSTUP_TOOLCHAIN=stable
+    cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+    cd scuttle
+    export RUSTUP_TOOLCHAIN=stable
+    export CARGO_TARGET_DIR=target
+    cargo build --frozen --release -p scuttle
+}
+
+check() {
+    cd scuttle
+    export RUSTUP_TOOLCHAIN=stable
+    cargo test --frozen --workspace
+}
+
+package() {
+    cd scuttle
+    install -Dm755 target/release/scuttle "$pkgdir/usr/bin/scuttle"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/scuttle/README.md"
+    install -Dm644 config/scuttle.example.toml "$pkgdir/usr/share/doc/scuttle/config.example.toml"
+    install -Dm644 config/hyprland.lua "$pkgdir/usr/share/doc/scuttle/hyprland.lua"
+    install -Dm644 config/hyprland-legacy.conf "$pkgdir/usr/share/doc/scuttle/hyprland-legacy.conf"
+}
