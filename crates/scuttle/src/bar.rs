@@ -108,6 +108,7 @@ pub struct Bar {
     memory: Option<gtk::Label>,
     network: Option<gtk::Image>,
     battery: Option<(gtk::Box, gtk::Label)>,
+    notifications: Option<gtk::Button>,
     /// The pending clock tick, shared with the timer that re-arms it.
     clock_timer: Option<ClockTimer>,
 }
@@ -157,6 +158,7 @@ impl Bar {
             memory: None,
             network: None,
             battery: None,
+            notifications: None,
             clock_timer: None,
         };
 
@@ -301,8 +303,17 @@ impl Bar {
                 self.battery = Some((row.clone(), value));
                 Some(row.upcast())
             }
+            Module::Notifications => {
+                let button = gtk::Button::new();
+                button.add_css_class("badge");
+                button.set_valign(gtk::Align::Center);
+                // Hidden until there is something to count.
+                button.set_visible(false);
+                self.notifications = Some(button.clone());
+                Some(button.upcast())
+            }
             // These need services that are not built yet.
-            Module::Media | Module::Volume | Module::Notifications => None,
+            Module::Media | Module::Volume => None,
         }
     }
 
@@ -317,6 +328,30 @@ impl Bar {
                 .active_title
                 .eq_ignore_ascii_case(&desktop.active_class);
             title.set_text(if redundant { "" } else { &desktop.active_title });
+        }
+    }
+
+    /// Shows how many notifications have not been looked at, or that
+    /// "do not disturb" is on. With neither, the badge is hidden.
+    pub fn update_notifications(&self, unseen: usize, do_not_disturb: bool) {
+        let Some(button) = &self.notifications else {
+            return;
+        };
+        button.set_visible(unseen > 0 || do_not_disturb);
+        set_class(button, "muted", do_not_disturb);
+        if do_not_disturb {
+            button.set_label("dnd");
+            button.set_tooltip_text(Some("Do not disturb is on"));
+        } else {
+            button.set_label(&unseen.min(99).to_string());
+            button.set_tooltip_text(Some("Unread notifications. Click to clear."));
+        }
+    }
+
+    /// Runs `callback` when the notification badge is clicked.
+    pub fn connect_notifications_clicked(&self, callback: impl Fn() + 'static) {
+        if let Some(button) = &self.notifications {
+            button.connect_clicked(move |_| callback());
         }
     }
 

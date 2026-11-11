@@ -16,6 +16,26 @@ pub enum Surface {
     Bar,
 }
 
+/// A two-state setting changed from the command line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Switch {
+    On,
+    Off,
+    Toggle,
+}
+
+impl Switch {
+    /// The new state, given the current one.
+    pub fn apply(self, current: bool) -> bool {
+        match self {
+            Switch::On => true,
+            Switch::Off => false,
+            Switch::Toggle => !current,
+        }
+    }
+}
+
 /// A command sent to the running shell.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "lowercase")]
@@ -35,6 +55,12 @@ pub enum Request {
     Launcher {
         query: String,
     },
+    /// Turn "do not disturb" on or off.
+    Dnd {
+        state: Switch,
+    },
+    /// Dismiss every notification on screen.
+    Dismiss,
     /// Re-read the config file and restyle everything.
     Reload,
     /// Stop the shell.
@@ -97,6 +123,10 @@ mod tests {
             Request::Launcher {
                 query: "= 2+2".into(),
             },
+            Request::Dnd {
+                state: Switch::Toggle,
+            },
+            Request::Dismiss,
             Request::Reload,
             Request::Quit,
         ];
@@ -114,6 +144,13 @@ mod tests {
         .unwrap();
         assert_eq!(line, r#"{"cmd":"toggle","surface":"launcher"}"#);
         assert_eq!(encode_response(&Response::Ok), "{\"status\":\"ok\"}\n");
+    }
+
+    #[test]
+    fn switches_apply_to_the_current_state() {
+        assert!(Switch::On.apply(false) && Switch::On.apply(true));
+        assert!(!Switch::Off.apply(true) && !Switch::Off.apply(false));
+        assert!(Switch::Toggle.apply(false) && !Switch::Toggle.apply(true));
     }
 
     #[test]

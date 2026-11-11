@@ -47,4 +47,8 @@ pub enum Msg {
     Stats(Stats),
     Apps(Vec<DesktopEntry>),
     Files(Vec<FileEntry>),
+    /// The notification service reporting a change.
+    Notification(scuttle_notify::Change),
+    /// The notification badge on a bar was clicked.
+    NotificationsSeen,
 }

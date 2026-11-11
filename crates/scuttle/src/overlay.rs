@@ -52,6 +52,7 @@ pub fn describe(action: &Action) -> (&'static str, String) {
         Action::Internal(Internal::Reload) => ("Re-read config.toml", String::new()),
         Action::Internal(Internal::Quit) => ("Stop Scuttle", String::new()),
         Action::Internal(Internal::Logout) => ("End this session", String::new()),
+        Action::Internal(Internal::ToggleDnd) => ("Turn do not disturb on or off", String::new()),
     }
 }
 
@@ -921,6 +922,11 @@ mod tests {
             ),
             (Action::Internal(Internal::Quit), "Stop Scuttle", ""),
             (Action::Internal(Internal::Logout), "End this session", ""),
+            (
+                Action::Internal(Internal::ToggleDnd),
+                "Turn do not disturb on or off",
+                "",
+            ),
         ];
         for (action, verb, extra) in cases {
             assert_eq!(describe(&action), (verb, extra.to_string()));

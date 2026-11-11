@@ -22,6 +22,7 @@ pub struct Config {
     pub appearance: Appearance,
     pub bar: Bar,
     pub launcher: Launcher,
+    pub notifications: Notifications,
     pub sound: Sound,
     pub power: Power,
 }
@@ -210,6 +211,53 @@ impl Default for Sound {
     }
 }
 
+/// Which corner notifications appear in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Corner {
+    #[default]
+    TopRight,
+    TopLeft,
+    BottomRight,
+    BottomLeft,
+}
+
+impl Corner {
+    pub fn is_top(self) -> bool {
+        matches!(self, Corner::TopRight | Corner::TopLeft)
+    }
+
+    pub fn is_right(self) -> bool {
+        matches!(self, Corner::TopRight | Corner::BottomRight)
+    }
+}
+
+/// `[notifications]`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Notifications {
+    /// Let Scuttle show notifications. Turn off to keep using another
+    /// notification daemon.
+    pub enabled: bool,
+    pub position: Corner,
+    /// How long a notification stays when the app does not say, in
+    /// milliseconds.
+    pub timeout_ms: u32,
+    /// Most notifications on screen at once.
+    pub max_visible: usize,
+}
+
+impl Default for Notifications {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            position: Corner::TopRight,
+            timeout_ms: 5000,
+            max_visible: 4,
+        }
+    }
+}
+
 /// `[power]`: what changes when a laptop runs on battery.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -322,6 +370,18 @@ impl Config {
                 "launcher.web_search must contain {query} where the search text goes.".into(),
             );
         }
+        if !(1000..=60_000).contains(&self.notifications.timeout_ms) {
+            return bad(format!(
+                "notifications.timeout_ms = {} is out of range. Use 1000 to 60000.",
+                self.notifications.timeout_ms
+            ));
+        }
+        if !(1..=10).contains(&self.notifications.max_visible) {
+            return bad(format!(
+                "notifications.max_visible = {} is out of range. Use 1 to 10.",
+                self.notifications.max_visible
+            ));
+        }
         if !(0.0..=1.0).contains(&self.sound.volume) {
             return bad(format!(
                 "sound.volume = {} is out of range. Use 0.0 to 1.0.",
@@ -418,6 +478,22 @@ mod tests {
     fn modules_parse_by_lowercase_name() {
         let c = Config::parse("[bar]\nright = [\"battery\", \"clock\"]\n").unwrap();
         assert_eq!(c.bar.right, vec![Module::Battery, Module::Clock]);
+    }
+
+    #[test]
+    fn notification_settings_parse_and_validate() {
+        let c = Config::parse("[notifications]\nposition = \"bottom-left\"\ntimeout_ms = 8000\n")
+            .unwrap();
+        assert_eq!(c.notifications.position, Corner::BottomLeft);
+        assert!(!c.notifications.position.is_top() && !c.notifications.position.is_right());
+        assert_eq!(c.notifications.timeout_ms, 8000);
+        assert!(c.notifications.enabled);
+        let err = Config::parse("[notifications]\ntimeout_ms = 5\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("1000 to 60000"), "{err}");
+        assert!(Config::parse("[notifications]\nmax_visible = 0\n").is_err());
+        assert!(Config::parse("[notifications]\nposition = \"middle\"\n").is_err());
     }
 
     #[test]

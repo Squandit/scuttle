@@ -26,3 +26,10 @@ hl.layer_rule({
     blur = true,
     ignore_alpha = 0.3,
 })
+
+hl.layer_rule({
+    name = "scuttle-toasts",
+    match = { namespace = "scuttle-toasts" },
+    blur = true,
+    ignore_alpha = 0.3,
+})

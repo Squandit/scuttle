@@ -21,16 +21,19 @@ pub enum Sound {
     Ask,
     /// Something could not be done.
     Error,
+    /// A notification arriving.
+    Notify,
 }
 
 impl Sound {
-    pub const ALL: [Sound; 6] = [
+    pub const ALL: [Sound; 7] = [
         Sound::Tick,
         Sound::Open,
         Sound::Close,
         Sound::Activate,
         Sound::Ask,
         Sound::Error,
+        Sound::Notify,
     ];
 }
 
@@ -135,6 +138,24 @@ fn tones(sound: Sound) -> &'static [Tone] {
             length: 0.14,
             level: 0.50,
         }],
+        // Two soft notes a fifth apart, a little longer than the rest
+        // so it reads as "something arrived".
+        Sound::Notify => &[
+            Tone {
+                from: 660.0,
+                to: 660.0,
+                start: 0.0,
+                length: 0.09,
+                level: 0.34,
+            },
+            Tone {
+                from: 990.0,
+                to: 990.0,
+                start: 0.07,
+                length: 0.12,
+                level: 0.30,
+            },
+        ],
     }
 }
 

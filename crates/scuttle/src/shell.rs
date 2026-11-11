@@ -4,23 +4,26 @@
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_channel::Sender;
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use scuttle_core::config::{Config, SoundWhen};
-use scuttle_core::ipc::{Request, Response, Surface};
+use scuttle_core::ipc::{Request, Response, Surface, Switch};
 use scuttle_core::{css, paths};
 use scuttle_hypr::Hyprland;
 use scuttle_launcher::history::History;
 use scuttle_launcher::Internal;
+use scuttle_notify::Store;
 use scuttle_sound::{Feedback, When};
 
 use crate::bar::Bar;
 use crate::msg::{DesktopState, Msg, Stats};
 use crate::overlay::Overlay;
 use crate::services::{self, SocketError};
+use crate::toasts::Toasts;
 
 fn sound_when(setting: SoundWhen) -> When {
     match setting {
@@ -39,6 +42,10 @@ pub struct Shell {
     hypr: Option<Hyprland>,
     overlay: Overlay,
     feedback: Rc<Feedback>,
+    /// `None` when notifications are turned off or another daemon has
+    /// them.
+    toasts: Option<Toasts>,
+    notifications: Option<Arc<Mutex<Store>>>,
     bars: RefCell<Vec<Bar>>,
     bars_hidden: Cell<bool>,
     desktop: RefCell<DesktopState>,
@@ -127,6 +134,26 @@ impl Shell {
         overlay.apply_config(&config, on_battery);
         overlay.update_stats(&stats);
 
+        // Notifications. If another daemon already handles them, say so
+        // once and carry on without.
+        let mut toasts = None;
+        let mut notifications = None;
+        if config.notifications.enabled {
+            let store = Arc::new(Mutex::new(Store::default()));
+            let notify_tx = tx.clone();
+            match scuttle_notify::serve(Arc::clone(&store), move |change| {
+                let _ = notify_tx.send_blocking(Msg::Notification(change));
+            }) {
+                Ok(handle) => {
+                    let stack = Toasts::new(app, &config, handle, Rc::clone(&feedback));
+                    stack.apply_config(&config, on_battery);
+                    toasts = Some(stack);
+                    notifications = Some(store);
+                }
+                Err(reason) => eprintln!("{reason}"),
+            }
+        }
+
         let shell = Rc::new(Shell {
             app: app.clone(),
             config_path: config_path.to_path_buf(),
@@ -136,6 +163,8 @@ impl Shell {
             hypr,
             overlay,
             feedback,
+            toasts,
+            notifications,
             bars: RefCell::new(Vec::new()),
             bars_hidden: Cell::new(false),
             desktop: RefCell::new(DesktopState::default()),
@@ -155,9 +184,21 @@ impl Shell {
                     }
                     Internal::Quit => shell.app.quit(),
                     Internal::Logout => {}
+                    Internal::ToggleDnd => {
+                        shell.set_do_not_disturb(Switch::Toggle);
+                    }
                 }
             }
         });
+
+        if let Some(toasts) = &shell.toasts {
+            let weak = Rc::downgrade(&shell);
+            toasts.on_change(move || {
+                if let Some(shell) = weak.upgrade() {
+                    shell.update_badges();
+                }
+            });
+        }
 
         // Read the compositor once up front so the first frame of the
         // bar already has its workspaces.
@@ -234,6 +275,12 @@ impl Shell {
             }
             Msg::Apps(apps) => self.overlay.set_apps(apps),
             Msg::Files(files) => self.overlay.set_files(files),
+            Msg::NotificationsSeen => self.mark_notifications_seen(),
+            Msg::Notification(change) => {
+                if let Some(toasts) = &self.toasts {
+                    toasts.apply(change);
+                }
+            }
         }
     }
 
@@ -273,6 +320,18 @@ impl Shell {
             Request::Toggle {
                 surface: Surface::Bar,
             } => self.set_bars_hidden(!self.bars_hidden.get()),
+            Request::Dnd { state } => match self.set_do_not_disturb(state) {
+                Some(_) => Response::Ok,
+                None => Response::Error {
+                    message: "Scuttle is not handling notifications in this session.".into(),
+                },
+            },
+            Request::Dismiss => {
+                if let Some(toasts) = &self.toasts {
+                    toasts.dismiss_all();
+                }
+                Response::Ok
+            }
             Request::Reload => match self.reload() {
                 Ok(()) => Response::Ok,
                 Err(message) => Response::Error { message },
@@ -292,6 +351,44 @@ impl Shell {
         Response::Ok
     }
 
+    /// Turns "do not disturb" on or off. Returns the new state, or
+    /// `None` when Scuttle is not the notification daemon.
+    fn set_do_not_disturb(&self, switch: Switch) -> Option<bool> {
+        let store = self.notifications.as_ref()?;
+        let on = {
+            let mut store = store.lock().ok()?;
+            let on = switch.apply(store.do_not_disturb());
+            store.set_do_not_disturb(on);
+            on
+        };
+        self.update_badges();
+        Some(on)
+    }
+
+    /// Refreshes the notification badge on every bar.
+    fn update_badges(&self) {
+        let Some(store) = &self.notifications else {
+            return;
+        };
+        let (unseen, dnd) = match store.lock() {
+            Ok(store) => (store.unseen(), store.do_not_disturb()),
+            Err(_) => return,
+        };
+        for bar in self.bars.borrow().iter() {
+            bar.update_notifications(unseen, dnd);
+        }
+    }
+
+    /// Clears the unread count, as when the badge is clicked.
+    fn mark_notifications_seen(&self) {
+        if let Some(store) = &self.notifications {
+            if let Ok(mut store) = store.lock() {
+                store.mark_seen();
+            }
+        }
+        self.update_badges();
+    }
+
     /// Regenerates the stylesheet from the current config and power state.
     fn restyle(&self) {
         let config = self.config.borrow();
@@ -299,6 +396,9 @@ impl Shell {
         self.provider
             .load_from_string(&css::stylesheet(&config.theme(), &config, on_battery));
         self.overlay.apply_config(&config, on_battery);
+        if let Some(toasts) = &self.toasts {
+            toasts.apply_config(&config, on_battery);
+        }
         self.feedback
             .configure(sound_when(config.sound.feedback), config.sound.volume);
     }
@@ -347,10 +447,16 @@ impl Shell {
             if let Some(bar) = Bar::new(&self.app, &monitor, &config, self.hypr.clone()) {
                 bar.update_desktop(&self.desktop.borrow());
                 bar.update_stats(&self.stats.borrow());
+                let tx = self.tx.clone();
+                bar.connect_notifications_clicked(move || {
+                    let _ = tx.try_send(Msg::NotificationsSeen);
+                });
                 bars.push(bar);
             }
         }
         *self.bars.borrow_mut() = bars;
+        drop(config);
+        self.update_badges();
     }
 
     /// Reloads automatically when config.toml is saved.

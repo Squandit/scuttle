@@ -36,6 +36,8 @@ pub enum Internal {
     Quit,
     /// End the desktop session.
     Logout,
+    /// Turn "do not disturb" on or off.
+    ToggleDnd,
 }
 
 /// What choosing a result does.

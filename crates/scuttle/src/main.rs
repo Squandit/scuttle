@@ -9,6 +9,7 @@ mod msg;
 mod overlay;
 mod services;
 mod shell;
+mod toasts;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -17,7 +18,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use gtk::prelude::*;
 use gtk::{gio, glib};
 use scuttle_core::config::Config;
-use scuttle_core::ipc::{self, Request, Response, Surface};
+use scuttle_core::ipc::{self, Request, Response, Surface, Switch};
 use scuttle_core::paths;
 
 /// The annotated config that `scuttle config example` prints.
@@ -50,6 +51,13 @@ enum Command {
     Hide { surface: SurfaceArg },
     /// Open the launcher with text already typed, e.g. `scuttle launcher "> "`
     Launcher { query: Vec<String> },
+    /// Turn "do not disturb" on or off (toggles when no state is given)
+    Dnd {
+        #[arg(default_value = "toggle")]
+        state: SwitchArg,
+    },
+    /// Dismiss every notification on screen
+    Dismiss,
     /// Re-read the config file
     Reload,
     /// Stop the shell
@@ -82,6 +90,13 @@ impl From<SurfaceArg> for Surface {
             SurfaceArg::Bar => Surface::Bar,
         }
     }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum SwitchArg {
+    On,
+    Off,
+    Toggle,
 }
 
 #[derive(Subcommand)]
@@ -124,6 +139,14 @@ fn main() -> ExitCode {
         Command::Launcher { query } => Request::Launcher {
             query: query.join(" "),
         },
+        Command::Dnd { state } => Request::Dnd {
+            state: match state {
+                SwitchArg::On => Switch::On,
+                SwitchArg::Off => Switch::Off,
+                SwitchArg::Toggle => Switch::Toggle,
+            },
+        },
+        Command::Dismiss => Request::Dismiss,
         Command::Reload => Request::Reload,
         Command::Quit => Request::Quit,
         Command::Ping => Request::Ping,
@@ -228,7 +251,12 @@ mod tests {
     fn hyprland_snippets_cover_autostart_keybind_and_blur() {
         for snippet in [HYPRLAND_LUA, HYPRLAND_LEGACY] {
             assert!(snippet.contains("scuttle toggle launcher"));
-            assert!(snippet.contains("scuttle-bar") && snippet.contains("scuttle-launcher"));
+            for surface in ["scuttle-bar", "scuttle-launcher", "scuttle-toasts"] {
+                assert!(
+                    snippet.contains(surface),
+                    "{surface} is missing a blur rule"
+                );
+            }
         }
         assert!(HYPRLAND_LUA.contains("hl.exec_cmd(\"scuttle\")"));
         assert!(HYPRLAND_LEGACY.contains("exec-once = scuttle"));

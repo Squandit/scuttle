@@ -26,6 +26,8 @@ export XDG_CURRENT_DESKTOP=Hyprland
 export WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDERER=pixman
 export GSK_RENDERER=cairo GDK_BACKEND=wayland
 export SWAYSOCK="$XDG_RUNTIME_DIR/sway.sock"
+# A private D-Bus session, so Scuttle can run its notification service.
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 
 start() {
     mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
@@ -46,6 +48,12 @@ CONF
     done
     [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] || { echo "Sway did not start. See $RUN/sway.log" >&2; exit 1; }
 
+    if command -v dbus-daemon > /dev/null; then
+        dbus-daemon --session --nofork --address="$DBUS_SESSION_BUS_ADDRESS" > "$RUN/dbus.log" 2>&1 &
+        echo $! > "$RUN/dbus.pid"
+        sleep 0.2
+    fi
+
     "$MOCK" "$XDG_RUNTIME_DIR/hypr/mock" > "$RUN/mock.log" 2>&1 &
     echo $! > "$RUN/mock.pid"
     sleep 0.2
@@ -57,7 +65,7 @@ CONF
 }
 
 stop() {
-    for name in scuttle mock sway; do
+    for name in scuttle mock dbus sway; do
         if [ -f "$RUN/$name.pid" ]; then
             kill "$(cat "$RUN/$name.pid")" 2>/dev/null || true
             rm -f "$RUN/$name.pid"
@@ -72,6 +80,6 @@ case "${1:-}" in
     stop) stop ;;
     shot) grim "${2:?Give a file name for the screenshot}" ;;
     ctl) shift; "$BIN" "$@" ;;
-    env) env | grep -E '^(XDG_|WAYLAND_|HYPRLAND_|SWAYSOCK|GSK_|GDK_)' ;;
+    env) env | grep -E '^(XDG_|WAYLAND_|HYPRLAND_|SWAYSOCK|GSK_|GDK_|DBUS_)' ;;
     *) sed -n '2,11p' "$0"; exit 2 ;;
 esac

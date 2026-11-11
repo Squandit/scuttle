@@ -64,6 +64,10 @@ pub fn stylesheet(theme: &Theme, config: &Config, on_battery: bool) -> String {
         ),
         ("dur", format!("{}ms", motion.duration_ms())),
         ("exit", format!("{}ms", motion.exit_ms())),
+        (
+            "toast_travel",
+            format!("{}px", (motion.travel_px() * 3).min(40)),
+        ),
         ("travel", format!("{}px", motion.travel_px())),
         (
             "stagger_rules",
@@ -183,7 +187,8 @@ window.scuttle {
 .module .value { font-family: $font_mono; font-size: 12px; }
 .module.warn .value { color: $accent_text; }
 
-.badge {
+.scuttle .badge {
+  padding: 0 6px;
   background-color: $accent;
   color: $on_accent;
   border-radius: 11px;
@@ -192,6 +197,37 @@ window.scuttle {
   font-size: 12px;
   font-weight: 600;
 }
+
+.scuttle .badge.muted {
+  background-color: $wash_strong;
+  color: $text_mid;
+  font-family: $font_mono;
+  font-weight: 500;
+}
+
+/* ---- Notifications -------------------------------------------------- */
+
+.toast {
+  background-color: $panel;
+  border: 1px solid $line;
+  border-radius: $radius;
+  padding: 14px;
+  opacity: 0;
+  transform: translateX($toast_travel);
+  transition: opacity $exit ease-in, transform $exit ease-in;
+}
+
+.from-left .toast { transform: translateX(-$toast_travel); }
+
+.toast.shown {
+  opacity: 1;
+  transform: none;
+  transition: opacity $dur ease-out, transform $dur $ease;
+}
+
+.toast.critical { border-color: $accent; }
+.toast-title { font-size: 15px; font-weight: 600; color: $text; }
+.toast-body { font-size: 13px; color: $text_dim; }
 
 /* ---- Launcher ------------------------------------------------------- */
 

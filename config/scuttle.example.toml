@@ -38,8 +38,9 @@ margin = 10
 # Which modules go where. Available: "workspaces", "title", "clock",
 # "media", "cpu", "memory", "network", "volume", "battery",
 # "notifications". The battery module only appears on machines that have
-# a battery. "media", "volume" and "notifications" are not built yet and
-# show nothing for now.
+# a battery. "notifications" is a badge that appears when you have
+# unread notifications or "do not disturb" is on. "media" and "volume"
+# are not built yet and show nothing for now.
 left = ["workspaces", "title"]
 center = ["clock"]
 right = ["media", "cpu", "memory", "network", "volume", "battery", "notifications"]
@@ -58,6 +59,20 @@ max_results = 8
 terminal = ""
 # Folders searched for files. Relative paths start at your home folder.
 file_roots = ["Documents", "Downloads", "Pictures", "Desktop", "Projects"]
+
+[notifications]
+# Let Scuttle show notifications. Set this to false to keep using mako,
+# dunst or another notification daemon. Takes effect on restart.
+enabled = true
+# Which corner they appear in: "top-right", "top-left", "bottom-right"
+# or "bottom-left".
+position = "top-right"
+# How long a notification stays when the app does not say, in
+# milliseconds, 1000 to 60000. Critical ones stay until dismissed.
+timeout_ms = 5000
+# Most notifications on screen at once, 1 to 10. Older ones make room
+# and stay in the history.
+max_visible = 4
 
 [sound]
 # Short, soft sounds when you open the launcher, move through results

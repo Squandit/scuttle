@@ -117,6 +117,14 @@ const SYSTEM_COMMANDS: &[SystemCommand] = &[
         key: "sys:poweroff",
     },
     SystemCommand {
+        title: "Do not disturb",
+        keywords: "dnd quiet silence mute notifications focus",
+        icon: "notifications-disabled-symbolic",
+        action: || Action::Internal(Internal::ToggleDnd),
+        confirm: false,
+        key: "sys:dnd",
+    },
+    SystemCommand {
         title: "Reload Scuttle",
         keywords: "refresh config restart shell",
         icon: "view-refresh-symbolic",
