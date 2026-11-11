@@ -24,6 +24,10 @@ The battery widget only appears on machines that have a battery. A desktop PC ne
 
 **Live config.** Save `config.toml` and the shell restyles itself. A mistake in the file is reported with the reason, and the previous settings stay in place.
 
+**A settings window.** `scuttle settings`, or type "settings" in the launcher. Every setting has a control, and under each one is the exact line it writes to `config.toml`. Changes apply as you make them. It edits your file in place and keeps your comments, so you can move between the window and a text editor freely.
+
+![The settings window](docs/img/settings.png)
+
 **Notifications.** Scuttle is its own notification daemon. Toasts slide in from a corner you choose, show the app's buttons, and pause their countdown while your pointer is on them. Critical ones stay until you dismiss them. A badge on the bar counts what you have not looked at, and do-not-disturb holds back everything except critical notifications.
 
 ![Notification toasts under the bar](docs/img/notifications.png)
@@ -42,7 +46,7 @@ The battery widget only appears on machines that have a battery. A desktop PC ne
 
 ## What is not built yet
 
-The settings app, screen capture, the keybind editor and the lock screen. The assistant cannot see the screen or read answers aloud yet. [docs/roadmap.md](docs/roadmap.md) has the details.
+Screen capture, the keybind editor and the lock screen. The assistant cannot see the screen or read answers aloud yet. [docs/roadmap.md](docs/roadmap.md) has the details.
 
 ## Install
 
@@ -112,7 +116,7 @@ scuttle hyprland            # Hyprland 0.55 and newer (Lua config)
 scuttle hyprland --legacy   # older Hyprland (hyprland.conf)
 ```
 
-Add the output to your config. It starts Scuttle with the session, opens the launcher when you tap Super on its own, opens the assistant on Super + /, binds the volume, brightness and media keys, and tells Hyprland to blur what is behind Scuttle's panels and toasts.
+Add the output to your config. It starts Scuttle with the session, opens the launcher when you tap Super on its own, opens the assistant on Super + /, binds the volume, brightness and media keys, floats the settings window, and tells Hyprland to blur what is behind Scuttle's panels and toasts.
 
 If you already run Waybar, rofi or another bar or launcher, stop them first so you do not end up with two. The same goes for mako, dunst or swaync: while one of them is running it keeps the notifications, and Scuttle says so when it starts. To keep your current notification daemon on purpose, set `enabled = false` under `[notifications]`.
 
@@ -189,6 +193,7 @@ scuttle toggle assistant    # open or close the assistant panel
 scuttle ask why is my fan loud   # open the assistant and ask
 scuttle assistant status    # show how the assistant reaches Claude
 scuttle assistant set-key   # store an API key in the keyring (also: clear-key)
+scuttle settings            # open the settings window
 scuttle toggle bar          # hide or show the bar
 scuttle dnd                 # toggle do not disturb (or: dnd on, dnd off)
 scuttle dismiss             # dismiss every notification on screen
@@ -207,7 +212,9 @@ Bind any of these to keys in Hyprland.
 
 ## Configure
 
-The config lives at `~/.config/scuttle/config.toml`. Every setting is optional. To start from the annotated defaults:
+There are two ways to change settings, and they are the same thing underneath. `scuttle settings` opens a window with a control for everything. Or edit `~/.config/scuttle/config.toml` by hand. The window writes to that file, one line per change, and shows you the line. Reset on a row removes the line again.
+
+Every setting is optional. To start the file from the annotated defaults:
 
 ```sh
 mkdir -p ~/.config/scuttle

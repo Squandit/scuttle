@@ -134,6 +134,22 @@ const SYSTEM_COMMANDS: &[SystemCommand] = &[
         key: "sys:dnd",
     },
     SystemCommand {
+        title: "Settings",
+        keywords: "scuttle preferences config options theme appearance",
+        icon: "preferences-system-symbolic",
+        action: || Action::Internal(Internal::Settings),
+        confirm: false,
+        key: "sys:settings",
+    },
+    SystemCommand {
+        title: "Assistant",
+        keywords: "claude ai ask chat help",
+        icon: "dialog-question-symbolic",
+        action: || Action::Internal(Internal::Assistant),
+        confirm: false,
+        key: "sys:assistant",
+    },
+    SystemCommand {
         title: "Reload Scuttle",
         keywords: "refresh config restart shell",
         icon: "view-refresh-symbolic",

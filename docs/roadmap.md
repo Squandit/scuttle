@@ -7,7 +7,7 @@ What is planned and not built yet, roughly in order. The README lists what works
 - **LiMusic.** The bar's media widget works with any MPRIS player. Check it against LiMusic on a real machine, and add whatever LiMusic needs if it does not speak MPRIS.
 - **Theme export without matugen.** Scuttle already matches the rest of the desktop through matugen in both directions. For setups without matugen, write Scuttle's own exporters for GTK, the common terminals, Hyprland borders and animation curves, and VS Code.
 - **Lock screen.**
-- **Settings app.** Every row shows the config line it writes, and edits the same `config.toml`.
+- **Settings extras.** Drag to reorder bar widgets instead of typing their names, a colour picker beside the accent box, and a font list.
 
 ## After that
 

@@ -28,6 +28,7 @@ use crate::msg::{DesktopState, Msg, Stats};
 use crate::osd::{Gauge, Osd};
 use crate::overlay::Overlay;
 use crate::services::{self, SocketError};
+use crate::settings::Settings;
 use crate::toasts::Toasts;
 
 fn sound_when(setting: SoundWhen) -> When {
@@ -54,6 +55,8 @@ pub struct Shell {
     osd: Osd,
     /// `None` when the assistant is turned off in the config.
     assistant: Option<Panel>,
+    /// The settings window, built the first time it is opened.
+    settings: RefCell<Option<Settings>>,
     volume: Cell<Option<Volume>>,
     /// `None` when there is no D-Bus session to find players on.
     media: Option<Controller>,
@@ -208,6 +211,7 @@ impl Shell {
             notifications,
             osd,
             assistant,
+            settings: RefCell::new(None),
             volume: Cell::new(None),
             media,
             track: RefCell::new(None),
@@ -257,6 +261,12 @@ impl Shell {
                     Internal::ToggleDnd => {
                         shell.set_do_not_disturb(Switch::Toggle);
                     }
+                    Internal::Assistant => {
+                        if let Some(panel) = &shell.assistant {
+                            panel.show();
+                        }
+                    }
+                    Internal::Settings => shell.settings().show(),
                 }
             }
         });
@@ -384,6 +394,14 @@ impl Shell {
         }
     }
 
+    /// The settings window, built on first use.
+    fn settings(&self) -> Settings {
+        self.settings
+            .borrow_mut()
+            .get_or_insert_with(|| Settings::new(&self.app, &self.config_path))
+            .clone()
+    }
+
     /// The assistant panel, or why there is none.
     fn panel(&self) -> Result<&Panel, Response> {
         self.assistant.as_ref().ok_or_else(|| Response::Error {
@@ -454,6 +472,26 @@ impl Shell {
                 },
                 Err(off) => off,
             },
+            Request::Show {
+                surface: Surface::Settings,
+            } => {
+                self.settings().show();
+                Response::Ok
+            }
+            Request::Hide {
+                surface: Surface::Settings,
+            } => {
+                if let Some(settings) = self.settings.borrow().as_ref() {
+                    settings.hide();
+                }
+                Response::Ok
+            }
+            Request::Toggle {
+                surface: Surface::Settings,
+            } => {
+                self.settings().toggle();
+                Response::Ok
+            }
             Request::Show {
                 surface: Surface::Bar,
             } => self.set_bars_hidden(false),
@@ -618,19 +656,44 @@ impl Shell {
     /// Re-reads the config file. On an error the running config stays
     /// in place and the reason is returned.
     pub fn reload(&self) -> Result<(), String> {
-        let new = Config::load(&self.config_path).map_err(|e| {
-            let message = e.to_string();
-            eprintln!("{message}\nKeeping the previous settings.");
-            message
-        })?;
-        let roots_changed = new.launcher.file_roots != self.config.borrow().launcher.file_roots;
+        let loaded = Config::load(&self.config_path);
+        // The settings window shows the file as it is, broken or not.
+        let refresh_settings = || {
+            if let Some(settings) = self.settings.borrow().as_ref() {
+                if settings.is_open() {
+                    settings.refresh();
+                }
+            }
+        };
+        let new = match loaded {
+            Ok(new) => new,
+            Err(e) => {
+                let message = e.to_string();
+                eprintln!("{message}\nKeeping the previous settings.");
+                refresh_settings();
+                return Err(message);
+            }
+        };
+        let (roots_changed, bar_changed) = {
+            let old = self.config.borrow();
+            (
+                new.launcher.file_roots != old.launcher.file_roots,
+                // The bar is rebuilt only when something it is built
+                // from changes. Colours and fonts arrive through the
+                // stylesheet, so a theme change does not flicker it.
+                new.bar != old.bar || new.appearance.scale != old.appearance.scale,
+            )
+        };
         *self.config.borrow_mut() = new;
         self.restyle();
         self.watch_palette();
-        self.rebuild_bars();
+        if bar_changed {
+            self.rebuild_bars();
+        }
         if roots_changed {
             self.index_files();
         }
+        refresh_settings();
         Ok(())
     }
 

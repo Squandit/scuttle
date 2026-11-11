@@ -15,6 +15,7 @@ pub enum Surface {
     Launcher,
     Bar,
     Assistant,
+    Settings,
 }
 
 /// A two-state setting changed from the command line.

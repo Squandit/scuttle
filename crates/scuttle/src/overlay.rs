@@ -56,6 +56,8 @@ pub fn describe(action: &Action) -> (&'static str, String) {
         Action::Internal(Internal::Quit) => ("Stop Scuttle", String::new()),
         Action::Internal(Internal::Logout) => ("End this session", String::new()),
         Action::Internal(Internal::ToggleDnd) => ("Turn do not disturb on or off", String::new()),
+        Action::Internal(Internal::Assistant) => ("Open the assistant panel", String::new()),
+        Action::Internal(Internal::Settings) => ("Open Scuttle's settings", String::new()),
     }
 }
 

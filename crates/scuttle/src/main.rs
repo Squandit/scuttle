@@ -11,6 +11,7 @@ mod osd;
 mod overlay;
 mod scale;
 mod services;
+mod settings;
 mod shell;
 mod toasts;
 
@@ -54,6 +55,8 @@ enum Command {
     Hide { surface: SurfaceArg },
     /// Open the launcher with text already typed, e.g. `scuttle launcher "> "`
     Launcher { query: Vec<String> },
+    /// Open the settings window
+    Settings,
     /// Open the assistant and ask it something, e.g. `scuttle ask why is my fan loud`
     Ask {
         #[arg(required = true)]
@@ -116,6 +119,7 @@ enum SurfaceArg {
     Launcher,
     Bar,
     Assistant,
+    Settings,
 }
 
 impl From<SurfaceArg> for Surface {
@@ -124,6 +128,7 @@ impl From<SurfaceArg> for Surface {
             SurfaceArg::Launcher => Surface::Launcher,
             SurfaceArg::Bar => Surface::Bar,
             SurfaceArg::Assistant => Surface::Assistant,
+            SurfaceArg::Settings => Surface::Settings,
         }
     }
 }
@@ -202,6 +207,9 @@ fn ipc_request(command: Command) -> Result<Request, Command> {
         },
         Command::Launcher { query } => Request::Launcher {
             query: query.join(" "),
+        },
+        Command::Settings => Request::Show {
+            surface: Surface::Settings,
         },
         Command::Ask { message } => Request::Ask {
             message: message.join(" "),
@@ -590,6 +598,11 @@ mod tests {
                 );
             }
         }
+        // The settings window is matched by its title, so the rule and
+        // the window have to agree on it.
+        for snippet in [HYPRLAND_LUA, HYPRLAND_LEGACY] {
+            assert!(snippet.contains(&format!("^({})$", settings::TITLE)));
+        }
         assert!(HYPRLAND_LUA.contains("hl.exec_cmd(\"scuttle\")"));
         assert!(HYPRLAND_LEGACY.contains("exec-once = scuttle"));
         // Hyprland's own layer animation must be off, or the launcher
@@ -656,6 +669,22 @@ mod tests {
         ] {
             assert!(request_from_args(&args(bad)).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn settings_opens_from_the_command_line() {
+        assert_eq!(
+            request_from_args(&["settings".into()]),
+            Ok(Request::Show {
+                surface: Surface::Settings
+            })
+        );
+        assert_eq!(
+            request_from_args(&["toggle".into(), "settings".into()]),
+            Ok(Request::Toggle {
+                surface: Surface::Settings
+            })
+        );
     }
 
     #[test]

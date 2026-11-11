@@ -47,3 +47,12 @@ for _, surface in ipairs(surfaces) do
         no_anim = true,
     })
 end
+
+-- The settings window opens floating in the middle of the screen,
+-- not tiled.
+hl.window_rule({
+    name = "scuttle-settings",
+    match = { title = "^(Scuttle Settings)$" },
+    float = true,
+    center = true,
+})

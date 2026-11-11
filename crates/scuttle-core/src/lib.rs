@@ -7,9 +7,11 @@
 pub mod color;
 pub mod config;
 pub mod css;
+pub mod edit;
 pub mod ipc;
 pub mod motion;
 pub mod paths;
+pub mod schema;
 pub mod theme;
 
 pub use color::Rgba;

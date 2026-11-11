@@ -579,6 +579,158 @@ $stagger_rules
 .scuttle button.send:disabled { background-color: $wash_strong; color: $text_dim; }
 .scuttle button.send.stop { background-color: $wash_strong; color: $text; }
 
+/* ---- Settings ------------------------------------------------------- */
+
+window.scuttle.settings { background-color: $ground; }
+
+.settings-side {
+  background-color: $surface;
+  border-right: 1px solid $line;
+  padding: 22px 12px;
+}
+
+.settings-heading {
+  font-family: $font_display;
+  font-size: 22px;
+  font-weight: 300;
+  padding: 0 10px 4px 10px;
+}
+
+.scuttle .settings-nav button {
+  border-radius: $radius_xs;
+  padding: 9px 10px;
+  font-size: 14px;
+  color: $text_mid;
+}
+
+.scuttle .settings-nav button:hover { background-color: $wash; color: $text; }
+
+.scuttle .settings-nav button:checked {
+  background-color: $accent;
+  color: $on_accent;
+  font-weight: 600;
+}
+
+.settings-top { padding: 24px 22px 14px 28px; }
+.settings-title { font-family: $font_display; font-size: 28px; font-weight: 300; }
+.settings-page { padding: 0 28px 20px 28px; }
+
+.settings-row { padding: 14px 0; border-bottom: 1px solid $line; }
+.settings-label { font-size: 15px; color: $text; }
+.settings-help { font-size: 13px; color: $text_dim; }
+
+/* The config line a row writes. */
+.settings-line { font-family: $font_mono; font-size: 12px; color: $text_dim; }
+.settings-readout { font-family: $font_mono; font-size: 13px; color: $text_mid; }
+
+.scuttle button.settings-reset {
+  font-size: 12px;
+  color: $text_dim;
+  padding: 2px 8px;
+  border-radius: $radius_xs;
+}
+
+.scuttle button.settings-reset:hover { background-color: $wash; color: $accent_text; }
+
+.settings-footer {
+  border-top: 1px solid $line;
+  padding: 12px 28px;
+  font-size: 12px;
+  color: $text_dim;
+}
+
+.settings-footer.bad { color: $accent_text; }
+
+.segmented { background-color: $wash; border-radius: $radius_xs; padding: 3px; }
+
+.scuttle .segmented button {
+  padding: 6px 13px;
+  border-radius: $radius_xs;
+  font-size: 13px;
+  color: $text_mid;
+}
+
+.scuttle .segmented button:hover { color: $text; }
+.scuttle .segmented button:checked { background-color: $accent; color: $on_accent; font-weight: 600; }
+
+.scuttle switch {
+  background: none;
+  background-color: $wash_strong;
+  border: none;
+  box-shadow: none;
+  border-radius: 14px;
+  min-width: 46px;
+  min-height: 26px;
+}
+
+.scuttle switch:checked { background-color: $accent; }
+
+.scuttle switch slider {
+  background: none;
+  background-color: $text;
+  border: none;
+  box-shadow: none;
+  border-radius: 11px;
+  min-width: 22px;
+  min-height: 22px;
+  margin: 2px;
+}
+
+.scuttle switch:checked slider { background-color: $on_accent; }
+.scuttle switch image { opacity: 0; }
+
+.scuttle scale { padding: 8px 0; }
+
+.scuttle scale trough {
+  background-color: $wash_strong;
+  border: none;
+  border-radius: 2px;
+  min-height: 4px;
+}
+
+.scuttle scale highlight {
+  /* Some themes pull the fill outwards with negative margins. */
+  margin: 0;
+  min-height: 4px;
+  min-width: 4px;
+  background-color: $accent;
+  border: none;
+  border-radius: 2px;
+}
+
+.scuttle scale slider {
+  background: none;
+  background-color: $text;
+  border: none;
+  box-shadow: none;
+  border-radius: 9px;
+  min-width: 18px;
+  min-height: 18px;
+  margin: -7px;
+}
+
+.scuttle entry.settings-entry {
+  background: none;
+  background-color: $wash;
+  color: $text;
+  caret-color: $accent;
+  border: 1px solid $line;
+  box-shadow: none;
+  outline: none;
+  border-radius: $radius_xs;
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.scuttle entry.settings-entry:focus-within { border-color: $accent_edge; }
+.scuttle entry.settings-entry selection { background-color: $accent; color: $on_accent; }
+.scuttle entry.settings-entry placeholder { color: $text_dim; }
+
+.settings button:focus-visible,
+.settings switch:focus-visible,
+.settings scale:focus-visible { outline: 2px solid $accent_edge; outline-offset: 2px; }
+
 /* ---- Shared pieces -------------------------------------------------- */
 
 .panel {

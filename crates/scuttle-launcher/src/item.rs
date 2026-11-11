@@ -42,6 +42,10 @@ pub enum Internal {
     Logout,
     /// Turn "do not disturb" on or off.
     ToggleDnd,
+    /// Open the assistant panel.
+    Assistant,
+    /// Open the settings window.
+    Settings,
 }
 
 /// What choosing a result does.
