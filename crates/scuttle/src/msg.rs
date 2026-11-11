@@ -51,4 +51,9 @@ pub enum Msg {
     Notification(scuttle_notify::Change),
     /// The notification badge on a bar was clicked.
     NotificationsSeen,
+    /// The output volume as last read. `None` when there is no audio
+    /// output or it cannot be read.
+    Volume(Option<scuttle_sys::audio::Volume>),
+    /// The volume widget on a bar was scrolled or clicked.
+    VolumeRequest(scuttle_sys::audio::VolumeChange),
 }

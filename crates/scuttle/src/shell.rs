@@ -11,16 +11,19 @@ use async_channel::Sender;
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use scuttle_core::config::{Config, SoundWhen};
-use scuttle_core::ipc::{Request, Response, Surface, Switch};
+use scuttle_core::ipc::{Request, Response, Step, Surface, Switch};
 use scuttle_core::{css, paths};
 use scuttle_hypr::Hyprland;
 use scuttle_launcher::history::History;
 use scuttle_launcher::Internal;
 use scuttle_notify::Store;
 use scuttle_sound::{Feedback, When};
+use scuttle_sys::audio::{self, Volume, VolumeChange};
+use scuttle_sys::brightness;
 
 use crate::bar::Bar;
 use crate::msg::{DesktopState, Msg, Stats};
+use crate::osd::{Gauge, Osd};
 use crate::overlay::Overlay;
 use crate::services::{self, SocketError};
 use crate::toasts::Toasts;
@@ -46,6 +49,8 @@ pub struct Shell {
     /// them.
     toasts: Option<Toasts>,
     notifications: Option<Arc<Mutex<Store>>>,
+    osd: Osd,
+    volume: Cell<Option<Volume>>,
     bars: RefCell<Vec<Bar>>,
     bars_hidden: Cell<bool>,
     desktop: RefCell<DesktopState>,
@@ -154,6 +159,9 @@ impl Shell {
             }
         }
 
+        let osd = Osd::new(app, &config);
+        osd.apply_config(&config, on_battery);
+
         let shell = Rc::new(Shell {
             app: app.clone(),
             config_path: config_path.to_path_buf(),
@@ -165,6 +173,8 @@ impl Shell {
             feedback,
             toasts,
             notifications,
+            osd,
+            volume: Cell::new(None),
             bars: RefCell::new(Vec::new()),
             bars_hidden: Cell::new(false),
             desktop: RefCell::new(DesktopState::default()),
@@ -212,6 +222,7 @@ impl Shell {
         shell.rebuild_bars();
 
         services::watch_stats(tx.clone());
+        services::watch_volume(tx.clone());
         services::scan_apps(tx.clone());
         shell.index_files();
         shell.watch_config();
@@ -276,6 +287,12 @@ impl Shell {
             Msg::Apps(apps) => self.overlay.set_apps(apps),
             Msg::Files(files) => self.overlay.set_files(files),
             Msg::NotificationsSeen => self.mark_notifications_seen(),
+            Msg::Volume(volume) => self.set_volume(volume),
+            Msg::VolumeRequest(change) => {
+                if let Err(problem) = self.change_volume(change) {
+                    eprintln!("{problem}");
+                }
+            }
             Msg::Notification(change) => {
                 if let Some(toasts) = &self.toasts {
                     toasts.apply(change);
@@ -326,6 +343,35 @@ impl Shell {
                     message: "Scuttle is not handling notifications in this session.".into(),
                 },
             },
+            Request::Volume { step, amount } => {
+                let change = match step {
+                    Step::Up => VolumeChange::Up(amount),
+                    Step::Down => VolumeChange::Down(amount),
+                    Step::Mute => VolumeChange::ToggleMute,
+                };
+                match self.change_volume(change) {
+                    Ok(()) => Response::Ok,
+                    Err(message) => Response::Error { message },
+                }
+            }
+            Request::Brightness { step, amount } => {
+                let delta = match step {
+                    Step::Up => amount.min(100) as i32,
+                    Step::Down => -(amount.min(100) as i32),
+                    Step::Mute => {
+                        return Response::Error {
+                            message: "Brightness can go up or down, but it cannot be muted.".into(),
+                        }
+                    }
+                };
+                match brightness::step(delta) {
+                    Ok(percent) => {
+                        self.osd.show(Gauge::Brightness(percent));
+                        Response::Ok
+                    }
+                    Err(message) => Response::Error { message },
+                }
+            }
             Request::Dismiss => {
                 if let Some(toasts) = &self.toasts {
                     toasts.dismiss_all();
@@ -349,6 +395,22 @@ impl Shell {
         self.bars_hidden.set(hidden);
         self.rebuild_bars();
         Response::Ok
+    }
+
+    /// Records a volume reading and shows it on every bar.
+    fn set_volume(&self, volume: Option<Volume>) {
+        self.volume.set(volume);
+        for bar in self.bars.borrow().iter() {
+            bar.update_volume(volume);
+        }
+    }
+
+    /// Changes the volume and shows the popup with the result.
+    fn change_volume(&self, change: VolumeChange) -> Result<(), String> {
+        let volume = audio::change(change)?;
+        self.set_volume(Some(volume));
+        self.osd.show(Gauge::Volume(volume));
+        Ok(())
     }
 
     /// Turns "do not disturb" on or off. Returns the new state, or
@@ -399,6 +461,7 @@ impl Shell {
         if let Some(toasts) = &self.toasts {
             toasts.apply_config(&config, on_battery);
         }
+        self.osd.apply_config(&config, on_battery);
         self.feedback
             .configure(sound_when(config.sound.feedback), config.sound.volume);
     }
@@ -450,6 +513,11 @@ impl Shell {
                 let tx = self.tx.clone();
                 bar.connect_notifications_clicked(move || {
                     let _ = tx.try_send(Msg::NotificationsSeen);
+                });
+                bar.update_volume(self.volume.get());
+                let tx = self.tx.clone();
+                bar.connect_volume_requested(move |change| {
+                    let _ = tx.try_send(Msg::VolumeRequest(change));
                 });
                 bars.push(bar);
             }

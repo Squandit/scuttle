@@ -36,6 +36,16 @@ impl Switch {
     }
 }
 
+/// Which way to move a level such as volume or brightness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Step {
+    Up,
+    Down,
+    /// Toggle mute. Only meaningful for volume.
+    Mute,
+}
+
 /// A command sent to the running shell.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "lowercase")]
@@ -61,6 +71,17 @@ pub enum Request {
     },
     /// Dismiss every notification on screen.
     Dismiss,
+    /// Change the output volume by `amount` percentage points, or
+    /// toggle mute.
+    Volume {
+        step: Step,
+        amount: u32,
+    },
+    /// Change the screen brightness by `amount` percentage points.
+    Brightness {
+        step: Step,
+        amount: u32,
+    },
     /// Re-read the config file and restyle everything.
     Reload,
     /// Stop the shell.
@@ -127,6 +148,14 @@ mod tests {
                 state: Switch::Toggle,
             },
             Request::Dismiss,
+            Request::Volume {
+                step: Step::Up,
+                amount: 5,
+            },
+            Request::Brightness {
+                step: Step::Down,
+                amount: 10,
+            },
             Request::Reload,
             Request::Quit,
         ];

@@ -11,6 +11,7 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use scuttle_core::config::{BarPosition, BarStyle, Config, Module};
 use scuttle_hypr::{Dispatch, Hyprland};
 use scuttle_launcher::engine::pretty_class;
+use scuttle_sys::audio::{Volume, VolumeChange};
 
 use crate::msg::{DesktopState, Stats};
 
@@ -109,6 +110,7 @@ pub struct Bar {
     network: Option<gtk::Image>,
     battery: Option<(gtk::Box, gtk::Label)>,
     notifications: Option<gtk::Button>,
+    volume: Option<(gtk::Box, gtk::Label)>,
     /// The pending clock tick, shared with the timer that re-arms it.
     clock_timer: Option<ClockTimer>,
 }
@@ -159,6 +161,7 @@ impl Bar {
             network: None,
             battery: None,
             notifications: None,
+            volume: None,
             clock_timer: None,
         };
 
@@ -312,8 +315,17 @@ impl Bar {
                 self.notifications = Some(button.clone());
                 Some(button.upcast())
             }
-            // These need services that are not built yet.
-            Module::Media | Module::Volume => None,
+            Module::Volume => {
+                let (row, value) = stat("vol");
+                // Hidden until a volume has been read, so a machine
+                // with no audio output shows nothing.
+                row.set_visible(false);
+                row.set_tooltip_text(Some("Scroll to change the volume. Click to mute."));
+                self.volume = Some((row.clone(), value));
+                Some(row.upcast())
+            }
+            // Needs a service that is not built yet.
+            Module::Media => None,
         }
     }
 
@@ -329,6 +341,51 @@ impl Bar {
                 .eq_ignore_ascii_case(&desktop.active_class);
             title.set_text(if redundant { "" } else { &desktop.active_title });
         }
+    }
+
+    /// Shows the output volume, or hides the widget when there is none.
+    pub fn update_volume(&self, volume: Option<Volume>) {
+        let Some((row, label)) = &self.volume else {
+            return;
+        };
+        match volume {
+            None => row.set_visible(false),
+            Some(volume) => {
+                row.set_visible(true);
+                set_class(row, "warn", volume.muted);
+                if volume.muted {
+                    label.set_text("muted");
+                } else {
+                    label.set_text(&format!("{}%", volume.percent));
+                }
+            }
+        }
+    }
+
+    /// Runs `callback` when the volume widget is scrolled or clicked.
+    pub fn connect_volume_requested(&self, callback: impl Fn(VolumeChange) + 'static) {
+        let Some((row, _)) = &self.volume else {
+            return;
+        };
+        let callback = Rc::new(callback);
+
+        let scroll = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::VERTICAL);
+        scroll.connect_scroll({
+            let callback = Rc::clone(&callback);
+            move |_, _, dy| {
+                if dy < 0.0 {
+                    callback(VolumeChange::Up(2));
+                } else if dy > 0.0 {
+                    callback(VolumeChange::Down(2));
+                }
+                gtk::glib::Propagation::Stop
+            }
+        });
+        row.add_controller(scroll);
+
+        let click = gtk::GestureClick::new();
+        click.connect_released(move |_, _, _, _| callback(VolumeChange::ToggleMute));
+        row.add_controller(click);
     }
 
     /// Shows how many notifications have not been looked at, or that

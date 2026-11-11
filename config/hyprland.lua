@@ -11,6 +11,15 @@ end)
 -- key still works as a normal keybind.
 hl.bind("Super_L", hl.dsp.exec_cmd("scuttle toggle launcher"), { release = true })
 
+-- Volume and brightness keys. "locked" lets them work on the lock
+-- screen and "repeating" lets you hold them down.
+local held = { repeating = true, locked = true }
+hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("scuttle volume up"), held)
+hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("scuttle volume down"), held)
+hl.bind("XF86AudioMute", hl.dsp.exec_cmd("scuttle volume mute"), { locked = true })
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("scuttle brightness up"), held)
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("scuttle brightness down"), held)
+
 -- Blur what is behind Scuttle's translucent panels. ignore_alpha keeps
 -- the fully transparent gaps around the bar from being blurred too.
 hl.layer_rule({
@@ -30,6 +39,13 @@ hl.layer_rule({
 hl.layer_rule({
     name = "scuttle-toasts",
     match = { namespace = "scuttle-toasts" },
+    blur = true,
+    ignore_alpha = 0.3,
+})
+
+hl.layer_rule({
+    name = "scuttle-osd",
+    match = { namespace = "scuttle-osd" },
     blur = true,
     ignore_alpha = 0.3,
 })

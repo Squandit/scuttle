@@ -4,7 +4,6 @@ What is planned and not built yet, roughly in order. The README lists what works
 
 ## Next
 
-- **Volume and brightness popup.** Scuttle's own popup for the media keys, a volume widget on the bar (scroll to change, click to mute), and `scuttle volume` and `scuttle brightness` commands. The readers for both are already in `scuttle-sys`.
 - **Media widget on the bar.** Now playing, play and pause, from any MPRIS player. Check that it works with LiMusic in particular, and add whatever LiMusic needs if it does not speak MPRIS.
 - **One style across the desktop.** Export the current theme to GTK 3 and 4, Qt, the terminal (kitty, foot, alacritty), Hyprland borders, gaps and animation curves, and VS Code, so changing the accent in Scuttle changes all of them.
 - **Lock screen.**

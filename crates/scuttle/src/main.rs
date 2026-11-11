@@ -6,6 +6,7 @@
 mod actions;
 mod bar;
 mod msg;
+mod osd;
 mod overlay;
 mod services;
 mod shell;
@@ -18,7 +19,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use gtk::prelude::*;
 use gtk::{gio, glib};
 use scuttle_core::config::Config;
-use scuttle_core::ipc::{self, Request, Response, Surface, Switch};
+use scuttle_core::ipc::{self, Request, Response, Step, Surface, Switch};
 use scuttle_core::paths;
 
 /// The annotated config that `scuttle config example` prints.
@@ -58,6 +59,20 @@ enum Command {
     },
     /// Dismiss every notification on screen
     Dismiss,
+    /// Change the volume: up, down or mute
+    Volume {
+        step: StepArg,
+        /// How many percentage points to move
+        #[arg(long, default_value_t = 5)]
+        by: u32,
+    },
+    /// Change the screen brightness: up or down
+    Brightness {
+        step: StepArg,
+        /// How many percentage points to move
+        #[arg(long, default_value_t = 5)]
+        by: u32,
+    },
     /// Re-read the config file
     Reload,
     /// Stop the shell
@@ -88,6 +103,23 @@ impl From<SurfaceArg> for Surface {
         match arg {
             SurfaceArg::Launcher => Surface::Launcher,
             SurfaceArg::Bar => Surface::Bar,
+        }
+    }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum StepArg {
+    Up,
+    Down,
+    Mute,
+}
+
+impl From<StepArg> for Step {
+    fn from(arg: StepArg) -> Step {
+        match arg {
+            StepArg::Up => Step::Up,
+            StepArg::Down => Step::Down,
+            StepArg::Mute => Step::Mute,
         }
     }
 }
@@ -147,6 +179,14 @@ fn main() -> ExitCode {
             },
         },
         Command::Dismiss => Request::Dismiss,
+        Command::Volume { step, by } => Request::Volume {
+            step: step.into(),
+            amount: by,
+        },
+        Command::Brightness { step, by } => Request::Brightness {
+            step: step.into(),
+            amount: by,
+        },
         Command::Reload => Request::Reload,
         Command::Quit => Request::Quit,
         Command::Ping => Request::Ping,
@@ -251,7 +291,12 @@ mod tests {
     fn hyprland_snippets_cover_autostart_keybind_and_blur() {
         for snippet in [HYPRLAND_LUA, HYPRLAND_LEGACY] {
             assert!(snippet.contains("scuttle toggle launcher"));
-            for surface in ["scuttle-bar", "scuttle-launcher", "scuttle-toasts"] {
+            for surface in [
+                "scuttle-bar",
+                "scuttle-launcher",
+                "scuttle-toasts",
+                "scuttle-osd",
+            ] {
                 assert!(
                     snippet.contains(surface),
                     "{surface} is missing a blur rule"
@@ -260,6 +305,17 @@ mod tests {
         }
         assert!(HYPRLAND_LUA.contains("hl.exec_cmd(\"scuttle\")"));
         assert!(HYPRLAND_LEGACY.contains("exec-once = scuttle"));
+        for snippet in [HYPRLAND_LUA, HYPRLAND_LEGACY] {
+            for command in [
+                "scuttle volume up",
+                "scuttle volume down",
+                "scuttle volume mute",
+                "scuttle brightness up",
+                "scuttle brightness down",
+            ] {
+                assert!(snippet.contains(command), "{command} has no key");
+            }
+        }
     }
 
     #[test]

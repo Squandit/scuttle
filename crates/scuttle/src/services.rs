@@ -133,6 +133,55 @@ pub fn initial_stats() -> Stats {
     }
 }
 
+/// Reports the output volume once at startup and again whenever it
+/// changes, including changes made by other programs.
+///
+/// Changes are noticed through `pactl subscribe`, which prints a line
+/// per audio event and otherwise sleeps. Without `pactl` the first
+/// reading is still sent, and Scuttle's own volume commands keep the
+/// bar up to date.
+pub fn watch_volume(tx: Sender<Msg>) {
+    use std::io::BufRead;
+    use std::process::{Command, Stdio};
+
+    thread::spawn(move || {
+        let mut last = scuttle_sys::audio::read();
+        if tx.send_blocking(Msg::Volume(last)).is_err() {
+            return;
+        }
+        loop {
+            let child = Command::new("pactl")
+                .arg("subscribe")
+                .stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn();
+            let Ok(mut child) = child else { return };
+            if let Some(stdout) = child.stdout.take() {
+                for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                    // Sink events are volume and mute changes. Server
+                    // events include the default output changing.
+                    if !(line.contains("sink") || line.contains("server")) {
+                        continue;
+                    }
+                    let now = scuttle_sys::audio::read();
+                    if now != last {
+                        last = now;
+                        if tx.send_blocking(Msg::Volume(now)).is_err() {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            return;
+                        }
+                    }
+                }
+            }
+            let _ = child.wait();
+            // The sound server went away. Give it time to come back.
+            thread::sleep(Duration::from_secs(5));
+        }
+    });
+}
+
 /// Scans installed applications off the UI thread.
 pub fn scan_apps(tx: Sender<Msg>) {
     thread::spawn(move || {
