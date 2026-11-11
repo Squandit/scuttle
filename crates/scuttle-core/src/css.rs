@@ -245,6 +245,8 @@ window.scuttle {
 .module .key { color: $text_dim; font-family: $font_mono; font-size: 12px; }
 .module .value { font-family: $font_mono; font-size: 12px; }
 .module.warn .value { color: $accent_text; }
+.module.media image { color: $text_dim; }
+.module.media.playing image { color: $accent_text; }
 
 .scuttle .badge {
   padding: 0 6px;

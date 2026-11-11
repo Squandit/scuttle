@@ -20,6 +20,11 @@ hl.bind("XF86AudioMute", hl.dsp.exec_cmd("scuttle volume mute"), { locked = true
 hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd("scuttle brightness up"), held)
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("scuttle brightness down"), held)
 
+-- Media keys.
+hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("scuttle media toggle"), { locked = true })
+hl.bind("XF86AudioNext", hl.dsp.exec_cmd("scuttle media next"), { locked = true })
+hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("scuttle media previous"), { locked = true })
+
 -- Blur what is behind Scuttle's translucent panels. ignore_alpha keeps
 -- the fully transparent gaps around the bar from being blurred too.
 -- no_anim turns off Hyprland's own open and close animation for these

@@ -46,6 +46,15 @@ pub enum Step {
     Mute,
 }
 
+/// A playback command for the media player being shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Playback {
+    Toggle,
+    Next,
+    Previous,
+}
+
 /// A command sent to the running shell.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "cmd", rename_all = "lowercase")]
@@ -71,6 +80,10 @@ pub enum Request {
     },
     /// Dismiss every notification on screen.
     Dismiss,
+    /// Control the media player shown on the bar.
+    Media {
+        action: Playback,
+    },
     /// Change the output volume by `amount` percentage points, or
     /// toggle mute.
     Volume {
@@ -148,6 +161,9 @@ mod tests {
                 state: Switch::Toggle,
             },
             Request::Dismiss,
+            Request::Media {
+                action: Playback::Toggle,
+            },
             Request::Volume {
                 step: Step::Up,
                 amount: 5,

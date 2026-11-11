@@ -11,11 +11,12 @@ use async_channel::Sender;
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 use scuttle_core::config::{Config, SoundWhen};
-use scuttle_core::ipc::{Request, Response, Step, Surface, Switch};
+use scuttle_core::ipc::{Playback, Request, Response, Step, Surface, Switch};
 use scuttle_core::{css, paths};
 use scuttle_hypr::Hyprland;
 use scuttle_launcher::history::History;
 use scuttle_launcher::Internal;
+use scuttle_media::{Control, Controller, Track};
 use scuttle_notify::Store;
 use scuttle_sound::{Feedback, When};
 use scuttle_sys::audio::{self, Volume, VolumeChange};
@@ -51,6 +52,9 @@ pub struct Shell {
     notifications: Option<Arc<Mutex<Store>>>,
     osd: Osd,
     volume: Cell<Option<Volume>>,
+    /// `None` when there is no D-Bus session to find players on.
+    media: Option<Controller>,
+    track: RefCell<Option<Track>>,
     bars: RefCell<Vec<Bar>>,
     bars_hidden: Cell<bool>,
     desktop: RefCell<DesktopState>,
@@ -161,6 +165,17 @@ impl Shell {
             }
         }
 
+        let media_tx = tx.clone();
+        let media = match scuttle_media::watch(move |track| {
+            let _ = media_tx.send_blocking(Msg::Media(track));
+        }) {
+            Ok(controller) => Some(controller),
+            Err(reason) => {
+                eprintln!("{reason}");
+                None
+            }
+        };
+
         let osd = Osd::new(app, &config);
         osd.apply_config(&config, on_battery);
 
@@ -177,6 +192,8 @@ impl Shell {
             notifications,
             osd,
             volume: Cell::new(None),
+            media,
+            track: RefCell::new(None),
             bars: RefCell::new(Vec::new()),
             bars_hidden: Cell::new(false),
             desktop: RefCell::new(DesktopState::default()),
@@ -289,6 +306,17 @@ impl Shell {
             Msg::Apps(apps) => self.overlay.set_apps(apps),
             Msg::Files(files) => self.overlay.set_files(files),
             Msg::NotificationsSeen => self.mark_notifications_seen(),
+            Msg::Media(track) => {
+                for bar in self.bars.borrow().iter() {
+                    bar.update_media(track.as_ref());
+                }
+                *self.track.borrow_mut() = track;
+            }
+            Msg::MediaRequest(control) => {
+                if let Err(problem) = self.control_media(control) {
+                    eprintln!("{problem}");
+                }
+            }
             Msg::Volume(volume) => self.set_volume(volume),
             Msg::VolumeRequest(change) => {
                 if let Err(problem) = self.change_volume(change) {
@@ -345,6 +373,17 @@ impl Shell {
                     message: "Scuttle is not handling notifications in this session.".into(),
                 },
             },
+            Request::Media { action } => {
+                let control = match action {
+                    Playback::Toggle => Control::PlayPause,
+                    Playback::Next => Control::Next,
+                    Playback::Previous => Control::Previous,
+                };
+                match self.control_media(control) {
+                    Ok(()) => Response::Ok,
+                    Err(message) => Response::Error { message },
+                }
+            }
             Request::Volume { step, amount } => {
                 let change = match step {
                     Step::Up => VolumeChange::Up(amount),
@@ -397,6 +436,14 @@ impl Shell {
         self.bars_hidden.set(hidden);
         self.rebuild_bars();
         Response::Ok
+    }
+
+    /// Sends a playback command to the player being shown.
+    fn control_media(&self, control: Control) -> Result<(), String> {
+        match &self.media {
+            Some(controller) => controller.send(control),
+            None => Err("Media controls need a D-Bus session, and none was found.".into()),
+        }
     }
 
     /// Records a volume reading and shows it on every bar.
@@ -516,6 +563,11 @@ impl Shell {
                 let tx = self.tx.clone();
                 bar.connect_notifications_clicked(move || {
                     let _ = tx.try_send(Msg::NotificationsSeen);
+                });
+                bar.update_media(self.track.borrow().as_ref());
+                let tx = self.tx.clone();
+                bar.connect_media_requested(move |control| {
+                    let _ = tx.try_send(Msg::MediaRequest(control));
                 });
                 bar.update_volume(self.volume.get());
                 let tx = self.tx.clone();

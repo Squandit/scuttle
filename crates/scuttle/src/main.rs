@@ -20,7 +20,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use gtk::prelude::*;
 use gtk::{gio, glib};
 use scuttle_core::config::Config;
-use scuttle_core::ipc::{self, Request, Response, Step, Surface, Switch};
+use scuttle_core::ipc::{self, Playback, Request, Response, Step, Surface, Switch};
 use scuttle_core::paths;
 
 /// The annotated config that `scuttle config example` prints.
@@ -60,6 +60,8 @@ enum Command {
     },
     /// Dismiss every notification on screen
     Dismiss,
+    /// Control the media player: toggle, next or previous
+    Media { action: PlaybackArg },
     /// Change the volume: up, down or mute
     Volume {
         step: StepArg,
@@ -106,6 +108,13 @@ impl From<SurfaceArg> for Surface {
             SurfaceArg::Bar => Surface::Bar,
         }
     }
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum PlaybackArg {
+    Toggle,
+    Next,
+    Previous,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -180,6 +189,13 @@ fn main() -> ExitCode {
             },
         },
         Command::Dismiss => Request::Dismiss,
+        Command::Media { action } => Request::Media {
+            action: match action {
+                PlaybackArg::Toggle => Playback::Toggle,
+                PlaybackArg::Next => Playback::Next,
+                PlaybackArg::Previous => Playback::Previous,
+            },
+        },
         Command::Volume { step, by } => Request::Volume {
             step: step.into(),
             amount: by,
@@ -322,6 +338,9 @@ mod tests {
                 "scuttle volume mute",
                 "scuttle brightness up",
                 "scuttle brightness down",
+                "scuttle media toggle",
+                "scuttle media next",
+                "scuttle media previous",
             ] {
                 assert!(snippet.contains(command), "{command} has no key");
             }

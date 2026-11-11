@@ -1386,6 +1386,7 @@ dependencies = [
  "scuttle-core",
  "scuttle-hypr",
  "scuttle-launcher",
+ "scuttle-media",
  "scuttle-notify",
  "scuttle-sound",
  "scuttle-sys",
@@ -1414,6 +1415,13 @@ version = "0.1.0"
 dependencies = [
  "nucleo-matcher",
  "scuttle-core",
+]
+
+[[package]]
+name = "scuttle-media"
+version = "0.1.0"
+dependencies = [
+ "zbus",
 ]
 
 [[package]]

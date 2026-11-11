@@ -4,7 +4,7 @@ What is planned and not built yet, roughly in order. The README lists what works
 
 ## Next
 
-- **Media widget on the bar.** Now playing, play and pause, from any MPRIS player. Check that it works with LiMusic in particular, and add whatever LiMusic needs if it does not speak MPRIS.
+- **LiMusic.** The bar's media widget works with any MPRIS player. Check it against LiMusic on a real machine, and add whatever LiMusic needs if it does not speak MPRIS.
 - **One style across the desktop.** Export the current theme to GTK 3 and 4, Qt, the terminal (kitty, foot, alacritty), Hyprland borders, gaps and animation curves, and VS Code, so changing the accent in Scuttle changes all of them.
 - **Lock screen.**
 - **Settings app.** Every row shows the config line it writes, and edits the same `config.toml`.

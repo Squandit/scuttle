@@ -45,8 +45,9 @@ margin = 10
 # "notifications". The battery module only appears on machines that have
 # a battery. "notifications" is a badge that appears when you have
 # unread notifications or "do not disturb" is on. "volume" shows the
-# output level: scroll on it to change it, click to mute. "media" is not
-# built yet and shows nothing for now.
+# output level: scroll on it to change it, click to mute. "media" shows
+# what is playing in any player that supports MPRIS (most do): click to
+# play or pause, scroll to skip. It hides when no player is running.
 left = ["workspaces", "title"]
 center = ["clock"]
 right = ["media", "cpu", "memory", "network", "volume", "battery", "notifications"]

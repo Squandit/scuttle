@@ -11,6 +11,7 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use scuttle_core::config::{BarPosition, BarStyle, Config, Module};
 use scuttle_hypr::{Dispatch, Hyprland};
 use scuttle_launcher::engine::pretty_class;
+use scuttle_media::{Control, Track};
 use scuttle_sys::audio::{Volume, VolumeChange};
 
 use crate::msg::{DesktopState, Stats};
@@ -112,6 +113,7 @@ pub struct Bar {
     battery: Option<(gtk::Box, gtk::Label)>,
     notifications: Option<gtk::Button>,
     volume: Option<(gtk::Box, gtk::Label)>,
+    media: Option<(gtk::Box, gtk::Image, gtk::Label)>,
     /// The pending clock tick, shared with the timer that re-arms it.
     clock_timer: Option<ClockTimer>,
 }
@@ -163,6 +165,7 @@ impl Bar {
             battery: None,
             notifications: None,
             volume: None,
+            media: None,
             clock_timer: None,
         };
 
@@ -325,8 +328,22 @@ impl Bar {
                 self.volume = Some((row.clone(), value));
                 Some(row.upcast())
             }
-            // Needs a service that is not built yet.
-            Module::Media => None,
+            Module::Media => {
+                let row = gtk::Box::new(gtk::Orientation::Horizontal, px(7));
+                row.add_css_class("module");
+                row.add_css_class("media");
+                // Hidden until a player is running.
+                row.set_visible(false);
+                let icon = gtk::Image::new();
+                icon.set_pixel_size(px(12));
+                let title = gtk::Label::new(None);
+                title.set_ellipsize(pango::EllipsizeMode::End);
+                title.set_max_width_chars(28);
+                row.append(&icon);
+                row.append(&title);
+                self.media = Some((row.clone(), icon, title));
+                Some(row.upcast())
+            }
         }
     }
 
@@ -342,6 +359,61 @@ impl Bar {
                 .eq_ignore_ascii_case(&desktop.active_class);
             title.set_text(if redundant { "" } else { &desktop.active_title });
         }
+    }
+
+    /// Shows what is playing, or hides the widget when nothing is.
+    pub fn update_media(&self, track: Option<&Track>) {
+        let Some((row, icon, title)) = &self.media else {
+            return;
+        };
+        match track {
+            None => row.set_visible(false),
+            Some(track) => {
+                row.set_visible(true);
+                set_class(row, "playing", track.playing);
+                icon.set_icon_name(Some(if track.playing {
+                    "media-playback-start-symbolic"
+                } else {
+                    "media-playback-pause-symbolic"
+                }));
+                title.set_text(track.headline());
+                let who = if track.artist.is_empty() {
+                    track.identity.clone()
+                } else {
+                    format!("{}, {}", track.artist, track.identity)
+                };
+                row.set_tooltip_text(Some(&format!(
+                    "{}\n{who}\nClick to play or pause. Scroll to skip.",
+                    track.headline()
+                )));
+            }
+        }
+    }
+
+    /// Runs `callback` when the media widget is clicked or scrolled.
+    pub fn connect_media_requested(&self, callback: impl Fn(Control) + 'static) {
+        let Some((row, _, _)) = &self.media else {
+            return;
+        };
+        let callback = Rc::new(callback);
+
+        let click = gtk::GestureClick::new();
+        click.connect_released({
+            let callback = Rc::clone(&callback);
+            move |_, _, _, _| callback(Control::PlayPause)
+        });
+        row.add_controller(click);
+
+        let scroll = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::VERTICAL);
+        scroll.connect_scroll(move |_, _, dy| {
+            if dy > 0.0 {
+                callback(Control::Next);
+            } else if dy < 0.0 {
+                callback(Control::Previous);
+            }
+            gtk::glib::Propagation::Stop
+        });
+        row.add_controller(scroll);
     }
 
     /// Shows the output volume, or hides the widget when there is none.

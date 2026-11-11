@@ -54,6 +54,10 @@ pub enum Msg {
     /// The output volume as last read. `None` when there is no audio
     /// output or it cannot be read.
     Volume(Option<scuttle_sys::audio::Volume>),
+    /// What the media player is doing. `None` when none is running.
+    Media(Option<scuttle_media::Track>),
+    /// The media widget on a bar was clicked or scrolled.
+    MediaRequest(scuttle_media::Control),
     /// The volume widget on a bar was scrolled or clicked.
     VolumeRequest(scuttle_sys::audio::VolumeChange),
 }
