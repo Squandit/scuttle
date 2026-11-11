@@ -146,11 +146,19 @@ hl.bind(
     { description = "Scuttle launcher", release = true }
 )
 
+-- The assistant panel. Super + / is free in dusky's keybinds.
+hl.bind(
+    "SUPER + slash",
+    hl.dsp.exec_cmd(scuttle .. " toggle assistant"),
+    { description = "Scuttle assistant" }
+)
+
 -- Blur what is behind Scuttle's translucent panels. no_anim turns off
 -- Hyprland's own open and close animation for them: Scuttle animates
 -- them itself, and the two together show as a rectangle growing behind
 -- the launcher.
-for _, surface in ipairs({ "scuttle-bar", "scuttle-launcher", "scuttle-toasts", "scuttle-osd" }) do
+local surfaces = { "scuttle-bar", "scuttle-launcher", "scuttle-toasts", "scuttle-osd", "scuttle-assistant" }
+for _, surface in ipairs(surfaces) do
     hl.layer_rule({
         name = surface,
         match = { namespace = surface },

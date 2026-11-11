@@ -24,6 +24,7 @@ pub struct Config {
     pub launcher: Launcher,
     pub notifications: Notifications,
     pub sound: Sound,
+    pub assistant: Assistant,
     pub power: Power,
 }
 
@@ -268,6 +269,57 @@ impl Default for Notifications {
     }
 }
 
+/// How the assistant reaches Claude.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AssistantBackend {
+    /// The Claude subscription first, the API key when it cannot answer.
+    #[default]
+    Auto,
+    /// Only the Claude subscription, through the `claude` command.
+    Subscription,
+    /// Only the API key.
+    Api,
+}
+
+/// A side of the screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    #[default]
+    Right,
+    Left,
+}
+
+/// `[assistant]`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Assistant {
+    pub enabled: bool,
+    pub backend: AssistantBackend,
+    /// The model used on the Claude subscription.
+    pub subscription_model: String,
+    /// The model used on the API key.
+    pub api_model: String,
+    /// Which side of the screen the panel opens on.
+    pub side: Side,
+    /// Width of the panel in pixels, before `appearance.scale`.
+    pub width: u32,
+}
+
+impl Default for Assistant {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            backend: AssistantBackend::Auto,
+            subscription_model: "claude-opus-5-5".to_string(),
+            api_model: "claude-haiku-5-5".to_string(),
+            side: Side::Right,
+            width: 440,
+        }
+    }
+}
+
 /// `[power]`: what changes when a laptop runs on battery.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -398,6 +450,27 @@ impl Config {
                 self.notifications.max_visible
             ));
         }
+        if !(320..=900).contains(&self.assistant.width) {
+            return bad(format!(
+                "assistant.width = {} is out of range. Use 320 to 900.",
+                self.assistant.width
+            ));
+        }
+        for (name, model) in [
+            ("subscription_model", &self.assistant.subscription_model),
+            ("api_model", &self.assistant.api_model),
+        ] {
+            // A model name ends up on a command line and in a request,
+            // so it has to look like one.
+            let plain = model
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_' | '[' | ']'));
+            if model.is_empty() || !plain || model.starts_with('-') || model.len() > 80 {
+                return bad(format!(
+                    "assistant.{name} = \"{model}\" is not a model name. Use something like \"claude-opus-5-5\"."
+                ));
+            }
+        }
         if !(0.0..=1.0).contains(&self.sound.volume) {
             return bad(format!(
                 "sound.volume = {} is out of range. Use 0.0 to 1.0.",
@@ -475,6 +548,39 @@ mod tests {
     fn defaults_round_trip_through_toml() {
         let text = Config::default().to_toml();
         assert_eq!(Config::parse(&text).unwrap(), Config::default());
+    }
+
+    #[test]
+    fn the_assistant_defaults_to_opus_on_the_subscription_and_haiku_on_the_key() {
+        let a = Config::default().assistant;
+        assert!(a.enabled);
+        assert_eq!(a.backend, AssistantBackend::Auto);
+        assert_eq!(a.subscription_model, "claude-opus-5-5");
+        assert_eq!(a.api_model, "claude-haiku-5-5");
+        assert_eq!(a.side, Side::Right);
+    }
+
+    #[test]
+    fn the_assistant_section_is_read_and_checked() {
+        let c = Config::parse(
+            "[assistant]\nbackend = \"api\"\napi_model = \"claude-sonnet-5-5\"\nside = \"left\"\nwidth = 520\n",
+        )
+        .unwrap();
+        assert_eq!(c.assistant.backend, AssistantBackend::Api);
+        assert_eq!(c.assistant.api_model, "claude-sonnet-5-5");
+        assert_eq!(c.assistant.side, Side::Left);
+        assert_eq!(c.assistant.width, 520);
+
+        for bad in [
+            "[assistant]\nwidth = 100\n",
+            "[assistant]\nbackend = \"ollama\"\n",
+            "[assistant]\napi_model = \"\"\n",
+            "[assistant]\nsubscription_model = \"--dangerously-skip-permissions\"\n",
+            "[assistant]\napi_model = \"opus; rm -rf ~\"\n",
+            "[assistant]\napi_key = \"sk-ant-oops\"\n",
+        ] {
+            assert!(Config::parse(bad).is_err(), "{bad:?} should be rejected");
+        }
     }
 
     #[test]

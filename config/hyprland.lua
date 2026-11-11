@@ -15,6 +15,9 @@ hl.bind("Super_L", hl.dsp.exec_cmd("scuttle toggle launcher"), { release = true 
 hl.bind("SUPER + V", hl.dsp.exec_cmd("scuttle launcher ';'"))
 hl.bind("SUPER + period", hl.dsp.exec_cmd("scuttle launcher ':'"))
 
+-- The assistant panel. Super + / because it is the question mark key.
+hl.bind("SUPER + slash", hl.dsp.exec_cmd("scuttle toggle assistant"))
+
 -- Volume and brightness keys. "locked" lets them work on the lock
 -- screen and "repeating" lets you hold them down.
 local held = { repeating = true, locked = true }
@@ -34,7 +37,8 @@ hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("scuttle media previous"), { locked = t
 -- no_anim turns off Hyprland's own open and close animation for these
 -- surfaces: Scuttle animates them itself, and the two together show as
 -- a rectangle growing behind the launcher.
-for _, surface in ipairs({ "scuttle-bar", "scuttle-launcher", "scuttle-toasts", "scuttle-osd" }) do
+local surfaces = { "scuttle-bar", "scuttle-launcher", "scuttle-toasts", "scuttle-osd", "scuttle-assistant" }
+for _, surface in ipairs(surfaces) do
     hl.layer_rule({
         name = surface,
         match = { namespace = surface },

@@ -1,0 +1,13 @@
+[package]
+name = "scuttle-assistant"
+description = "The assistant behind Scuttle's side panel: Claude through a subscription or an API key"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+ureq = { version = "2", default-features = false, features = ["tls"] }

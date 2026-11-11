@@ -4,6 +4,7 @@
 //! sends a request to the shell that is already running.
 
 mod actions;
+mod assistant;
 mod bar;
 mod msg;
 mod osd;
@@ -45,14 +46,24 @@ struct Cli {
 enum Command {
     /// Start the shell (the default when no command is given)
     Run,
-    /// Show the launcher or bar if hidden, hide it if shown
+    /// Show the launcher, bar or assistant if hidden, hide it if shown
     Toggle { surface: SurfaceArg },
-    /// Show the launcher or bar
+    /// Show the launcher, bar or assistant
     Show { surface: SurfaceArg },
-    /// Hide the launcher or bar
+    /// Hide the launcher, bar or assistant
     Hide { surface: SurfaceArg },
     /// Open the launcher with text already typed, e.g. `scuttle launcher "> "`
     Launcher { query: Vec<String> },
+    /// Open the assistant and ask it something, e.g. `scuttle ask why is my fan loud`
+    Ask {
+        #[arg(required = true)]
+        message: Vec<String>,
+    },
+    /// Set up the assistant: its API key and how it reaches Claude
+    Assistant {
+        #[command(subcommand)]
+        action: AssistantAction,
+    },
     /// Turn "do not disturb" on or off (toggles when no state is given)
     Dnd {
         #[arg(default_value = "toggle")]
@@ -104,6 +115,7 @@ enum Command {
 enum SurfaceArg {
     Launcher,
     Bar,
+    Assistant,
 }
 
 impl From<SurfaceArg> for Surface {
@@ -111,6 +123,7 @@ impl From<SurfaceArg> for Surface {
         match arg {
             SurfaceArg::Launcher => Surface::Launcher,
             SurfaceArg::Bar => Surface::Bar,
+            SurfaceArg::Assistant => Surface::Assistant,
         }
     }
 }
@@ -155,6 +168,16 @@ enum ThemeAction {
 }
 
 #[derive(Subcommand)]
+enum AssistantAction {
+    /// Store a Claude API key in the system keyring
+    SetKey,
+    /// Remove the stored API key
+    ClearKey,
+    /// Show which ways of reaching Claude are set up
+    Status,
+}
+
+#[derive(Subcommand)]
 enum ConfigAction {
     /// Print where the config file is
     Path,
@@ -164,25 +187,10 @@ enum ConfigAction {
     Check,
 }
 
-fn main() -> ExitCode {
-    let cli = Cli::parse();
-    let config_path = cli.config.unwrap_or_else(paths::config_file);
-
-    let request = match cli.command.unwrap_or(Command::Run) {
-        Command::Run => return run(config_path),
-        Command::Config { action } => return config_command(action, config_path),
-        Command::Theme { action } => return theme_command(action, config_path),
-        Command::Hyprland { legacy } => {
-            print!(
-                "{}",
-                if legacy {
-                    HYPRLAND_LEGACY
-                } else {
-                    HYPRLAND_LUA
-                }
-            );
-            return ExitCode::SUCCESS;
-        }
+/// The request a command sends to the running shell, or the command
+/// back when it is one that runs without the shell.
+fn ipc_request(command: Command) -> Result<Request, Command> {
+    Ok(match command {
         Command::Toggle { surface } => Request::Toggle {
             surface: surface.into(),
         },
@@ -194,6 +202,9 @@ fn main() -> ExitCode {
         },
         Command::Launcher { query } => Request::Launcher {
             query: query.join(" "),
+        },
+        Command::Ask { message } => Request::Ask {
+            message: message.join(" "),
         },
         Command::Dnd { state } => Request::Dnd {
             state: match state {
@@ -221,6 +232,48 @@ fn main() -> ExitCode {
         Command::Reload => Request::Reload,
         Command::Quit => Request::Quit,
         Command::Ping => Request::Ping,
+        local => return Err(local),
+    })
+}
+
+/// Turns the words after `scuttle` into the request they would send.
+/// The assistant's desktop actions go through this, so they mean
+/// exactly what the same words mean in a terminal.
+pub fn request_from_args(args: &[String]) -> Result<Request, String> {
+    let words = std::iter::once("scuttle").chain(args.iter().map(String::as_str));
+    let cli = Cli::try_parse_from(words).map_err(|_| {
+        format!(
+            "\"scuttle {}\" is not a command Scuttle knows.",
+            args.join(" ")
+        )
+    })?;
+    cli.command
+        .ok_or(())
+        .and_then(|command| ipc_request(command).map_err(|_| ()))
+        .map_err(|_| format!("\"scuttle {}\" cannot be run from here.", args.join(" ")))
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let config_path = cli.config.unwrap_or_else(paths::config_file);
+
+    let request = match ipc_request(cli.command.unwrap_or(Command::Run)) {
+        Ok(request) => request,
+        Err(Command::Config { action }) => return config_command(action, config_path),
+        Err(Command::Theme { action }) => return theme_command(action, config_path),
+        Err(Command::Assistant { action }) => return assistant_command(action, config_path),
+        Err(Command::Hyprland { legacy }) => {
+            print!(
+                "{}",
+                if legacy {
+                    HYPRLAND_LEGACY
+                } else {
+                    HYPRLAND_LUA
+                }
+            );
+            return ExitCode::SUCCESS;
+        }
+        Err(_) => return run(config_path),
     };
 
     match ipc::send(&paths::socket_path(), &request) {
@@ -331,6 +384,116 @@ fn theme_command(action: ThemeAction, path: PathBuf) -> ExitCode {
     }
 }
 
+/// Reads one line from the terminal without showing it.
+fn read_secret(prompt: &str) -> std::io::Result<String> {
+    use std::io::{BufRead, IsTerminal, Write};
+    let stdin = std::io::stdin();
+    let hide = stdin.is_terminal();
+    if hide {
+        eprint!("{prompt}");
+        std::io::stderr().flush()?;
+        // Turn the terminal's echo off while the key is typed or pasted.
+        let _ = std::process::Command::new("stty").arg("-echo").status();
+    }
+    let mut line = String::new();
+    let read = stdin.lock().read_line(&mut line);
+    if hide {
+        let _ = std::process::Command::new("stty").arg("echo").status();
+        eprintln!();
+    }
+    read.map(|_| line.trim().to_string())
+}
+
+fn assistant_command(action: AssistantAction, path: PathBuf) -> ExitCode {
+    use scuttle_assistant::key::{masked, Keyring, ANTHROPIC, ANTHROPIC_ENV};
+    let keyring = Keyring::default();
+    match action {
+        AssistantAction::SetKey => {
+            let key = match read_secret(
+                "Paste your Claude API key and press Enter (it stays hidden): ",
+            ) {
+                Ok(key) => key,
+                Err(e) => {
+                    eprintln!("Could not read the key: {e}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            match keyring.store(ANTHROPIC, &key) {
+                Ok(()) => {
+                    println!(
+                        "Stored {} in the system keyring. The assistant will use it when your \
+                         Claude subscription is at its limit or is not set up.",
+                        masked(&key)
+                    );
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        AssistantAction::ClearKey => match keyring.clear(ANTHROPIC) {
+            Ok(()) => {
+                println!("Removed the API key from the system keyring.");
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::FAILURE
+            }
+        },
+        AssistantAction::Status => {
+            let config = Config::load(&path).unwrap_or_else(|e| {
+                eprintln!("{e}\nShowing the default settings instead.");
+                Config::default()
+            });
+            let settings = assistant::settings(&config);
+            let a = &config.assistant;
+            println!("enabled       {}", if a.enabled { "yes" } else { "no" });
+            println!(
+                "backend       {}",
+                match settings.prefer {
+                    scuttle_assistant::Prefer::Auto =>
+                        "auto (subscription first, then the API key)",
+                    scuttle_assistant::Prefer::Subscription => "subscription only",
+                    scuttle_assistant::Prefer::ApiKey => "API key only",
+                }
+            );
+            let claude = actions::on_path(&settings.claude_program);
+            println!(
+                "subscription  {} ({})",
+                if claude {
+                    "the claude command is installed"
+                } else {
+                    "the claude command is not installed"
+                },
+                scuttle_assistant::pretty_model(&a.subscription_model)
+            );
+            let key = match keyring.lookup(ANTHROPIC) {
+                Some(key) => format!("{} in the keyring", masked(&key)),
+                None => match std::env::var(ANTHROPIC_ENV) {
+                    Ok(key) if !key.trim().is_empty() => {
+                        format!("{} from {ANTHROPIC_ENV}", masked(key.trim()))
+                    }
+                    _ => "none set (add one with `scuttle assistant set-key`)".to_string(),
+                },
+            };
+            println!(
+                "API key       {key} ({})",
+                scuttle_assistant::pretty_model(&a.api_model)
+            );
+            if claude {
+                println!(
+                    "\nWhether the claude command is signed in only shows when it is used. \
+                     Run `claude` in a terminal once to sign in."
+                );
+            }
+            ExitCode::SUCCESS
+        }
+    }
+}
+
 fn config_command(action: ConfigAction, path: PathBuf) -> ExitCode {
     match action {
         ConfigAction::Path => println!("{}", path.display()),
@@ -413,11 +576,13 @@ mod tests {
     fn hyprland_snippets_cover_autostart_keybind_and_blur() {
         for snippet in [HYPRLAND_LUA, HYPRLAND_LEGACY] {
             assert!(snippet.contains("scuttle toggle launcher"));
+            assert!(snippet.contains("scuttle toggle assistant"));
             for surface in [
                 "scuttle-bar",
                 "scuttle-launcher",
                 "scuttle-toasts",
                 "scuttle-osd",
+                "scuttle-assistant",
             ] {
                 assert!(
                     snippet.contains(surface),
@@ -434,7 +599,7 @@ mod tests {
             HYPRLAND_LEGACY
                 .matches("layerrule = noanim, scuttle-")
                 .count(),
-            4
+            5
         );
         for snippet in [HYPRLAND_LUA, HYPRLAND_LEGACY] {
             for command in [
@@ -450,6 +615,57 @@ mod tests {
                 assert!(snippet.contains(command), "{command} has no key");
             }
         }
+    }
+
+    #[test]
+    fn the_assistant_s_actions_mean_what_the_command_line_means() {
+        let args = |s: &str| s.split(' ').map(str::to_string).collect::<Vec<_>>();
+        assert_eq!(
+            request_from_args(&args("volume down")),
+            Ok(Request::Volume {
+                step: Step::Down,
+                amount: 5
+            })
+        );
+        assert_eq!(
+            request_from_args(&args("dnd on")),
+            Ok(Request::Dnd { state: Switch::On })
+        );
+        assert_eq!(
+            request_from_args(&args("toggle bar")),
+            Ok(Request::Toggle {
+                surface: Surface::Bar
+            })
+        );
+        // Every action the assistant is allowed maps onto a request.
+        for (command, _) in scuttle_assistant::actions::DESKTOP_COMMANDS {
+            assert!(request_from_args(&args(command)).is_ok(), "{command}");
+        }
+    }
+
+    #[test]
+    fn words_that_are_not_shell_requests_are_refused() {
+        let args = |s: &str| s.split(' ').map(str::to_string).collect::<Vec<_>>();
+        for bad in [
+            "run",
+            "config example",
+            "assistant set-key",
+            "theme push",
+            "nonsense",
+            "volume sideways",
+        ] {
+            assert!(request_from_args(&args(bad)).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn ask_joins_its_words_into_one_message() {
+        assert_eq!(
+            request_from_args(&["ask".into(), "why".into(), "is it loud".into()]),
+            Ok(Request::Ask {
+                message: "why is it loud".into()
+            })
+        );
     }
 
     #[test]

@@ -22,6 +22,7 @@ use scuttle_sound::{Feedback, When};
 use scuttle_sys::audio::{self, Volume, VolumeChange};
 use scuttle_sys::brightness;
 
+use crate::assistant::Panel;
 use crate::bar::Bar;
 use crate::msg::{DesktopState, Msg, Stats};
 use crate::osd::{Gauge, Osd};
@@ -51,6 +52,8 @@ pub struct Shell {
     toasts: Option<Toasts>,
     notifications: Option<Arc<Mutex<Store>>>,
     osd: Osd,
+    /// `None` when the assistant is turned off in the config.
+    assistant: Option<Panel>,
     volume: Cell<Option<Volume>>,
     /// `None` when there is no D-Bus session to find players on.
     media: Option<Controller>,
@@ -121,6 +124,9 @@ impl Shell {
         // replace it.
         if let Some(settings) = gtk::Settings::default() {
             settings.set_gtk_entry_select_on_focus(false);
+            // Text in the assistant panel can be selected. Moving
+            // focus onto it with Tab should not select all of it.
+            settings.set_gtk_label_select_on_focus(false);
         }
 
         crate::scale::set(config.appearance.scale);
@@ -183,6 +189,12 @@ impl Shell {
         let osd = Osd::new(app, &config);
         osd.apply_config(&config, on_battery);
 
+        let assistant = config.assistant.enabled.then(|| {
+            let panel = Panel::new(app, &config, Rc::clone(&feedback), tx.clone());
+            panel.apply_config(&config, on_battery);
+            panel
+        });
+
         let shell = Rc::new(Shell {
             app: app.clone(),
             config_path: config_path.to_path_buf(),
@@ -195,6 +207,7 @@ impl Shell {
             toasts,
             notifications,
             osd,
+            assistant,
             volume: Cell::new(None),
             media,
             track: RefCell::new(None),
@@ -216,6 +229,20 @@ impl Shell {
 
         *shell.this.borrow_mut() = Rc::downgrade(&shell);
         shell.watch_palette();
+
+        if let Some(panel) = &shell.assistant {
+            // The assistant changes the desktop the same way the
+            // `scuttle` command does, and can do nothing the command
+            // cannot.
+            let weak = Rc::downgrade(&shell);
+            panel.on_desktop_action(move |args| {
+                let shell = weak.upgrade().ok_or("Scuttle is shutting down.")?;
+                match shell.handle_request(crate::request_from_args(args)?) {
+                    Response::Error { message } => Err(message),
+                    _ => Ok(()),
+                }
+            });
+        }
 
         shell.overlay.on_internal({
             let weak = Rc::downgrade(&shell);
@@ -248,6 +275,9 @@ impl Shell {
         if let Some(hypr) = &shell.hypr {
             if let Ok(desktop) = services::snapshot(hypr) {
                 shell.overlay.update_desktop(&desktop);
+                if let Some(panel) = &shell.assistant {
+                    panel.update_desktop(&desktop);
+                }
                 *shell.desktop.borrow_mut() = desktop;
             }
             services::watch_hyprland(hypr.clone(), tx.clone());
@@ -303,6 +333,9 @@ impl Shell {
                     bar.update_desktop(&desktop);
                 }
                 self.overlay.update_desktop(&desktop);
+                if let Some(panel) = &self.assistant {
+                    panel.update_desktop(&desktop);
+                }
                 *self.desktop.borrow_mut() = desktop;
             }
             Msg::Stats(stats) => {
@@ -343,7 +376,21 @@ impl Shell {
                     toasts.apply(change);
                 }
             }
+            Msg::Assistant(generation, msg) => {
+                if let Some(panel) = &self.assistant {
+                    panel.handle(generation, msg);
+                }
+            }
         }
+    }
+
+    /// The assistant panel, or why there is none.
+    fn panel(&self) -> Result<&Panel, Response> {
+        self.assistant.as_ref().ok_or_else(|| Response::Error {
+            message: "The assistant is turned off. Set enabled = true under [assistant] in \
+                      config.toml and restart Scuttle."
+                .into(),
+        })
     }
 
     fn handle_request(&self, request: Request) -> Response {
@@ -373,6 +420,40 @@ impl Shell {
                 self.overlay.show(Some(&query));
                 Response::Ok
             }
+            Request::Show {
+                surface: Surface::Assistant,
+            } => match self.panel() {
+                Ok(panel) => {
+                    panel.show();
+                    Response::Ok
+                }
+                Err(off) => off,
+            },
+            Request::Hide {
+                surface: Surface::Assistant,
+            } => match self.panel() {
+                Ok(panel) => {
+                    panel.hide();
+                    Response::Ok
+                }
+                Err(off) => off,
+            },
+            Request::Toggle {
+                surface: Surface::Assistant,
+            } => match self.panel() {
+                Ok(panel) => {
+                    panel.toggle();
+                    Response::Ok
+                }
+                Err(off) => off,
+            },
+            Request::Ask { message } => match self.panel() {
+                Ok(panel) => match panel.ask(&message) {
+                    Ok(()) => Response::Ok,
+                    Err(message) => Response::Error { message },
+                },
+                Err(off) => off,
+            },
             Request::Show {
                 surface: Surface::Bar,
             } => self.set_bars_hidden(false),
@@ -527,6 +608,9 @@ impl Shell {
             toasts.apply_config(&config, on_battery);
         }
         self.osd.apply_config(&config, on_battery);
+        if let Some(panel) = &self.assistant {
+            panel.apply_config(&config, on_battery);
+        }
         self.feedback
             .configure(sound_when(config.sound.feedback), config.sound.volume);
     }

@@ -97,6 +97,31 @@ feedback = "headphones"
 # Loudness of interface sounds, 0.0 to 1.0.
 volume = 0.25
 
+[assistant]
+# A side panel for asking Claude things and having it act on the
+# desktop. Open it with `scuttle toggle assistant`. It can change
+# volume, brightness, playback and do not disturb straight away, and it
+# can propose terminal commands, which only ever run after you press
+# Run. Set this to false to turn it off.
+enabled = true
+# How it reaches Claude:
+#   "auto"          your Claude subscription through the `claude` command
+#                   (Claude Code). When the subscription reaches its
+#                   limit, your API key takes over until it resets.
+#   "subscription"  only the subscription
+#   "api"           only the API key
+# The API key lives in the system keyring, never in this file. Set it
+# with `scuttle assistant set-key`.
+backend = "auto"
+# The model used on each. The subscription has room for the strongest
+# model; the API key is billed per use, so it gets the quick one.
+subscription_model = "claude-opus-5-5"
+api_model = "claude-haiku-5-5"
+# Which side of the screen the panel opens on: "right" or "left".
+side = "right"
+# Width of the panel in pixels, 320 to 900, before appearance.scale.
+width = 440
+
 [power]
 # On a laptop running on battery: turn blur off, and cap motion at
 # "subtle". Neither applies to a desktop PC.

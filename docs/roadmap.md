@@ -18,14 +18,15 @@ What is planned and not built yet, roughly in order. The README lists what works
 - **Wallpaper-generated theme** as an option beside the hand-made ones.
 - **Per-monitor workspaces** on the bar for multi-monitor setups.
 
-## Assistant panel
+## Assistant extras
 
-A side panel, cloud only.
+The panel itself is built: both backends, the switch between them, desktop actions, and terminal commands with approval. Still to come:
 
-- **Backends.** Use the `claude` command first so it runs on the user's Claude subscription, with Opus 5.5 as the default model there. When the subscription reports its limit is reached, fall back to the API key with Haiku 5.5 as the default, and switch back when the limit resets. Both models are changeable in settings. Whichever of the two a user has set up should work by itself.
-- **Abilities.** Control the desktop through Scuttle's own commands, with confirmation for anything risky. See a screen region or the focused window. Answer short questions inline in the launcher. Suggest terminal commands and run them after approval.
-- **Read aloud.** An optional button to speak an answer, and to speak selected text from the launcher, using Fish Audio. Off until a key is set.
-- **Keys.** API keys live in the system keyring. Never in the repo, the config file or logs.
+- **See the screen.** Send a screen region or the focused window along with a question.
+- **Answers in the launcher.** Short questions answered inline, without opening the panel.
+- **Read aloud.** An optional button to speak an answer, using Fish Audio. Off until a key is set, and the key goes in the keyring like the Claude one.
+- **Context.** Tell Claude which window is focused and what is playing, when the user asks about "this".
+- **Keeping conversations** between restarts, as an option.
 
 ## Developer tools
 

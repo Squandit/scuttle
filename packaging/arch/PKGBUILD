@@ -16,6 +16,8 @@ optdepends=(
     'wireplumber: volume control (provides wpctl)'
     'libpulse: detect headphones for interface sounds (provides pactl)'
     'pipewire-alsa: route interface sounds through PipeWire'
+    'libsecret: keep the assistant API key in the keyring (provides secret-tool)'
+    'claude-code: let the assistant use a Claude subscription (AUR)'
     'otf-geist: the default interface font (AUR)'
     'otf-geist-mono: the default monospace font (AUR)'
     'ttf-sora: the default display font (AUR)'

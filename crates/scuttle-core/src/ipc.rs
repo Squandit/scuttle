@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub enum Surface {
     Launcher,
     Bar,
+    Assistant,
 }
 
 /// A two-state setting changed from the command line.
@@ -73,6 +74,10 @@ pub enum Request {
     /// Open the launcher with text already typed, e.g. a mode prefix.
     Launcher {
         query: String,
+    },
+    /// Open the assistant panel and send it a message.
+    Ask {
+        message: String,
     },
     /// Turn "do not disturb" on or off.
     Dnd {

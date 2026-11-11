@@ -81,6 +81,16 @@ pub fn stylesheet(theme: &Theme, config: &Config, on_battery: bool) -> String {
                 .collect::<Vec<_>>()
                 .join("\n"),
         ),
+        (
+            "pulse",
+            // The "thinking" line breathes while waiting. With motion
+            // off it just sits there.
+            if motion.duration_ms() == 0 {
+                "none".to_string()
+            } else {
+                "pulse 1400ms ease-in-out infinite".to_string()
+            },
+        ),
         ("ease", motion.css_ease()),
     ];
     scale_px(&fill(TEMPLATE, tokens), config.appearance.scale)
@@ -442,6 +452,133 @@ $stagger_rules
 .glance .active { color: $accent_text; }
 .glance-clock { font-family: $font_display; font-size: 48px; font-weight: 200; }
 
+/* ---- Assistant ------------------------------------------------------ */
+
+.assistant {
+  background-color: $panel;
+  border: 1px solid $line;
+  border-radius: $radius_lg;
+  opacity: 0;
+  transform: translateX($toast_travel);
+  transition: opacity $exit ease-in, transform $exit ease-in;
+}
+
+.assistant.from-left { transform: translateX(-$toast_travel); }
+
+.assistant.open {
+  opacity: 1;
+  transform: none;
+  transition: opacity $dur ease-out, transform $dur $ease;
+}
+
+.assistant-head { padding: 16px 14px 10px 20px; }
+.assistant-title { font-family: $font_display; font-size: 20px; font-weight: 300; }
+
+.chip {
+  background-color: $wash;
+  color: $text_mid;
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+
+.chip.fallback { background-color: $accent_soft; color: $accent_text; }
+
+.scuttle button.icon {
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: $radius_xs;
+  color: $text_dim;
+}
+
+.scuttle button.icon:hover { background-color: $wash; color: $text; }
+
+.msgs { padding: 6px 18px 14px 18px; }
+
+.msg { font-size: 15px; }
+.msg.enter { animation: rise $dur $ease both; }
+
+.msg.user {
+  background-color: $wash_strong;
+  border-radius: $radius;
+  padding: 10px 14px;
+  margin-left: 44px;
+}
+
+.msg selection { background-color: $accent; color: $on_accent; }
+.msg link { color: $accent_text; }
+.msg-marker { color: $text_dim; min-width: 18px; }
+
+.msg-code {
+  background-color: $wash;
+  border-radius: $radius_sm;
+  padding: 10px 12px;
+  font-family: $font_mono;
+  font-size: 13px;
+}
+
+.msg-error { font-size: 13px; color: $accent_text; }
+.notice { font-size: 12px; color: $text_dim; }
+
+@keyframes pulse {
+  0% { opacity: 0.25; }
+  50% { opacity: 1; }
+  100% { opacity: 0.25; }
+}
+
+.thinking { font-size: 13px; color: $text_dim; animation: $pulse; }
+
+.action-card {
+  border: 1px solid $accent_edge;
+  border-radius: $radius;
+  padding: 12px;
+}
+
+.action-card.settled { border-color: $line; }
+.action-why { font-size: 14px; color: $text; }
+.action-status { font-size: 12px; color: $text_dim; }
+.action-status.bad { color: $accent_text; }
+.action-done { font-size: 13px; color: $text_mid; }
+.action-done image { color: $accent_text; }
+
+.scuttle button.suggestion {
+  border: 1px solid $line_strong;
+  border-radius: $radius_sm;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: $text_mid;
+}
+
+.scuttle button.suggestion:hover { background-color: $wash; color: $text; }
+
+.assistant-empty-title { font-family: $font_display; font-size: 24px; font-weight: 300; }
+
+.composer {
+  border-top: 1px solid $line;
+  padding: 12px 12px 12px 18px;
+}
+
+.composer textview, .composer textview text {
+  background: none;
+  color: $text;
+  font-size: 15px;
+  caret-color: $accent;
+}
+
+.composer textview selection { background-color: $accent; color: $on_accent; }
+.composer-placeholder { font-size: 15px; color: $text_dim; }
+
+.scuttle button.send {
+  background-color: $accent;
+  color: $on_accent;
+  border-radius: $radius_xs;
+  min-width: 38px;
+  min-height: 38px;
+}
+
+.scuttle button.send:disabled { background-color: $wash_strong; color: $text_dim; }
+.scuttle button.send.stop { background-color: $wash_strong; color: $text; }
+
 /* ---- Shared pieces -------------------------------------------------- */
 
 .panel {
@@ -474,6 +611,13 @@ $stagger_rules
 }
 
 .scuttle button.quiet:hover { background-color: $wash; }
+
+/* After the two above, so it can make either of them smaller. */
+.scuttle button.small { min-height: 32px; padding: 0 14px; font-size: 13px; }
+
+/* The assistant panel can be driven from the keyboard, so it shows
+   where focus is. Last, so no button style above can hide it. */
+.scuttle .assistant button:focus-visible { outline: 2px solid $accent_edge; outline-offset: 2px; }
 "#;
 
 #[cfg(test)]

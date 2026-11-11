@@ -62,4 +62,6 @@ pub enum Msg {
     MediaRequest(scuttle_media::Control),
     /// The volume widget on a bar was scrolled or clicked.
     VolumeRequest(scuttle_sys::audio::VolumeChange),
+    /// Something for the assistant panel, with the chat it belongs to.
+    Assistant(u64, crate::assistant::AssistantMsg),
 }

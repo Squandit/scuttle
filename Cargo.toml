@@ -8,6 +8,7 @@ members = [
     "crates/scuttle-sound",
     "crates/scuttle-notify",
     "crates/scuttle-media",
+    "crates/scuttle-assistant",
     "crates/scuttle",
 ]
 
@@ -29,6 +30,7 @@ scuttle-sys = { path = "crates/scuttle-sys" }
 scuttle-sound = { path = "crates/scuttle-sound" }
 scuttle-notify = { path = "crates/scuttle-notify" }
 scuttle-media = { path = "crates/scuttle-media" }
+scuttle-assistant = { path = "crates/scuttle-assistant" }
 
 [profile.release]
 opt-level = 3
