@@ -9,17 +9,26 @@ use std::time::Duration;
 use async_channel::Sender;
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
-use scuttle_core::config::Config;
+use scuttle_core::config::{Config, SoundWhen};
 use scuttle_core::ipc::{Request, Response, Surface};
 use scuttle_core::{css, paths};
 use scuttle_hypr::Hyprland;
 use scuttle_launcher::history::History;
 use scuttle_launcher::Internal;
+use scuttle_sound::{Feedback, When};
 
 use crate::bar::Bar;
 use crate::msg::{DesktopState, Msg, Stats};
 use crate::overlay::Overlay;
 use crate::services::{self, SocketError};
+
+fn sound_when(setting: SoundWhen) -> When {
+    match setting {
+        SoundWhen::Never => When::Never,
+        SoundWhen::Headphones => When::Headphones,
+        SoundWhen::Always => When::Always,
+    }
+}
 
 pub struct Shell {
     app: gtk::Application,
@@ -29,6 +38,7 @@ pub struct Shell {
     provider: gtk::CssProvider,
     hypr: Option<Hyprland>,
     overlay: Overlay,
+    feedback: Rc<Feedback>,
     bars: RefCell<Vec<Bar>>,
     bars_hidden: Cell<bool>,
     desktop: RefCell<DesktopState>,
@@ -102,7 +112,18 @@ impl Shell {
         );
 
         let history = History::load(&paths::data_dir().join("launcher-history"));
-        let overlay = Overlay::new(app, &config, &home, history, hypr.clone());
+        let feedback = Rc::new(Feedback::new(
+            sound_when(config.sound.feedback),
+            config.sound.volume,
+        ));
+        let overlay = Overlay::new(
+            app,
+            &config,
+            &home,
+            history,
+            hypr.clone(),
+            Rc::clone(&feedback),
+        );
         overlay.apply_config(&config, on_battery);
         overlay.update_stats(&stats);
 
@@ -114,6 +135,7 @@ impl Shell {
             provider,
             hypr,
             overlay,
+            feedback,
             bars: RefCell::new(Vec::new()),
             bars_hidden: Cell::new(false),
             desktop: RefCell::new(DesktopState::default()),
@@ -277,6 +299,8 @@ impl Shell {
         self.provider
             .load_from_string(&css::stylesheet(&config.theme(), &config, on_battery));
         self.overlay.apply_config(&config, on_battery);
+        self.feedback
+            .configure(sound_when(config.sound.feedback), config.sound.volume);
     }
 
     /// Re-reads the config file. On an error the running config stays

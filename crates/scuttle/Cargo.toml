@@ -16,6 +16,7 @@ scuttle-core.workspace = true
 scuttle-hypr.workspace = true
 scuttle-launcher.workspace = true
 scuttle-sys.workspace = true
+scuttle-sound.workspace = true
 gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
 gtk4-layer-shell = "0.8"
 async-channel = "2"

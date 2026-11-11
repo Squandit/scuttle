@@ -6,10 +6,12 @@ pkgdesc="A desktop shell for Hyprland: bar, launcher and more in one process"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Squandit/scuttle"
 license=('MIT')
-depends=('gtk4' 'gtk4-layer-shell' 'xdg-utils')
+depends=('gtk4' 'gtk4-layer-shell' 'alsa-lib' 'xdg-utils')
 makedepends=('cargo' 'git')
 optdepends=(
     'hyprland: workspaces, window titles and window switching'
+    'libpulse: detect headphones for interface sounds (provides pactl)'
+    'pipewire-alsa: route interface sounds through PipeWire'
     'otf-geist: the default interface font (AUR)'
     'otf-geist-mono: the default monospace font (AUR)'
     'ttf-sora: the default display font (AUR)'

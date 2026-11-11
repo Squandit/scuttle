@@ -16,6 +16,7 @@ use scuttle_launcher::engine::pretty_class;
 use scuttle_launcher::files::FileEntry;
 use scuttle_launcher::history::History;
 use scuttle_launcher::{Action, Engine, Internal, Item, Mode, WindowInfo};
+use scuttle_sound::{Feedback, Sound};
 
 use crate::actions;
 use crate::msg::{DesktopState, Stats};
@@ -92,6 +93,7 @@ struct Inner {
     hide_timer: RefCell<Option<glib::SourceId>>,
     terminal: RefCell<String>,
     hypr: Option<Hyprland>,
+    feedback: Rc<Feedback>,
     focused_monitor: RefCell<Option<String>>,
     on_internal: RefCell<Option<InternalHandler>>,
 }
@@ -110,6 +112,7 @@ impl Overlay {
         home: &Path,
         history: History,
         hypr: Option<Hyprland>,
+        feedback: Rc<Feedback>,
     ) -> Overlay {
         let window = gtk::ApplicationWindow::new(app);
         window.add_css_class("scuttle");
@@ -292,6 +295,7 @@ impl Overlay {
             terminal: RefCell::new(String::new()),
             hypr,
             focused_monitor: RefCell::new(None),
+            feedback,
             on_internal: RefCell::new(None),
         });
         let overlay = Overlay(inner);
@@ -544,6 +548,7 @@ impl Overlay {
                 .date
                 .set_text(&fmt("%A %-d %B").unwrap_or_default());
             inner.animate_rows.set(true);
+            inner.feedback.play(Sound::Open);
         }
 
         inner.message.set_text("");
@@ -572,10 +577,19 @@ impl Overlay {
         });
     }
 
+    /// Closes the overlay without running anything.
     pub fn hide(&self) {
+        self.close(Some(Sound::Close));
+    }
+
+    /// Closes the overlay, playing `sound` if it was open.
+    fn close(&self, sound: Option<Sound>) {
         let inner = &self.0;
         if !inner.open.replace(false) {
             return;
+        }
+        if let Some(sound) = sound {
+            inner.feedback.play(sound);
         }
         inner.scrim.remove_css_class("open");
         let exit = inner.exit_ms.get();
@@ -689,6 +703,9 @@ impl Overlay {
         if let Some(row) = inner.list.row_at_index(next) {
             inner.list.select_row(Some(&row));
             self.scroll_to(&row);
+            if next != current {
+                inner.feedback.play(Sound::Tick);
+            }
         }
     }
 
@@ -744,17 +761,19 @@ impl Overlay {
                 "Press Enter again to {}",
                 item.title.to_lowercase()
             ));
+            inner.feedback.play(Sound::Ask);
             return;
         }
 
         match self.run(&item.action) {
             Ok(()) => {
                 inner.engine.borrow_mut().record_use(&item, now_secs());
-                self.hide();
+                self.close(Some(Sound::Activate));
             }
             Err(problem) => {
                 inner.confirming.set(None);
                 inner.message.set_text(&problem);
+                inner.feedback.play(Sound::Error);
             }
         }
     }

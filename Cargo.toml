@@ -5,6 +5,7 @@ members = [
     "crates/scuttle-hypr",
     "crates/scuttle-launcher",
     "crates/scuttle-sys",
+    "crates/scuttle-sound",
     "crates/scuttle",
 ]
 
@@ -23,6 +24,7 @@ scuttle-core = { path = "crates/scuttle-core" }
 scuttle-hypr = { path = "crates/scuttle-hypr" }
 scuttle-launcher = { path = "crates/scuttle-launcher" }
 scuttle-sys = { path = "crates/scuttle-sys" }
+scuttle-sound = { path = "crates/scuttle-sound" }
 
 [profile.release]
 opt-level = 3
