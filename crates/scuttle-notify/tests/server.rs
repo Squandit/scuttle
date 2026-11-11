@@ -186,6 +186,35 @@ fn an_image_path_hint_replaces_the_icon() {
 }
 
 #[test]
+fn a_script_volume_popup_updates_one_toast() {
+    // What dusky's media keys send:
+    // notify-send -a OSD -h string:x-canonical-private-synchronous:osd -h int:value:40 Volume
+    let Some(f) = fixture() else { return };
+    let client = f.bus.client();
+    let popup = |level: i32| {
+        let mut hints = HashMap::new();
+        hints.insert("x-canonical-private-synchronous", Value::from("osd"));
+        hints.insert("value", Value::I32(level));
+        notify(&client, "OSD", 0, "Volume", "", &[], hints, -1)
+    };
+    let first = popup(40);
+    let Change::Show(n) = next_change(&f) else {
+        panic!("expected a new toast")
+    };
+    assert_eq!(n.progress, Some(40));
+    assert_eq!(n.sync_tag.as_deref(), Some("osd"));
+    assert!(n.transient);
+
+    let second = popup(45);
+    assert_eq!(second, first);
+    assert!(matches!(next_change(&f), Change::Replace(n) if n.progress == Some(45)));
+
+    // Out-of-range levels are clamped, not rejected.
+    popup(250);
+    assert!(matches!(next_change(&f), Change::Replace(n) if n.progress == Some(100)));
+}
+
+#[test]
 fn the_app_hears_when_its_notification_is_dismissed_or_acted_on() {
     let Some(f) = fixture() else { return };
     let client = f.bus.client();

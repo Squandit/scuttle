@@ -17,7 +17,7 @@ jobs:
     container: archlinux:latest
     steps:
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm --needed base-devel git rust gtk4 gtk4-layer-shell alsa-lib
+        run: pacman -Syu --noconfirm --needed base-devel git rust gtk4 gtk4-layer-shell alsa-lib dbus
 
       - uses: actions/checkout@v4
 
@@ -29,3 +29,6 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --locked
+
+      - name: Test the dusky installer
+        run: scripts/test-install-on-dusky.sh

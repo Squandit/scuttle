@@ -128,7 +128,10 @@ impl Toasts {
 
     fn show(&self, notification: Notification) {
         let inner = &self.0;
-        inner.feedback.play(Sound::Notify);
+        // A volume popup already makes itself heard.
+        if notification.sync_tag.is_none() {
+            inner.feedback.play(Sound::Notify);
+        }
 
         // Keep the stack short: the oldest toast that is not critical
         // makes room, and stays available in the history.
@@ -278,6 +281,12 @@ impl Toasts {
         }
         top.append(&text);
         root.append(&top);
+
+        if let Some(level) = notification.progress {
+            let bar = gtk::ProgressBar::new();
+            bar.set_fraction(level as f64 / 100.0);
+            root.append(&bar);
+        }
 
         let buttons: Vec<_> = notification.buttons().cloned().collect();
         if !buttons.is_empty() {

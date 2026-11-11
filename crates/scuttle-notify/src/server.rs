@@ -80,6 +80,25 @@ impl Server {
             .map(str::to_string)
             .unwrap_or(icon);
 
+        // Volume and brightness popups from scripts carry a level and a
+        // tag that says "replace my previous one".
+        let progress = hints.get("value").and_then(|v| {
+            v.downcast_ref::<i32>()
+                .ok()
+                .map(i64::from)
+                .or_else(|| v.downcast_ref::<u32>().ok().map(i64::from))
+                .or_else(|| v.downcast_ref::<i64>().ok())
+                .map(|level| level.clamp(0, 100) as u8)
+        });
+        let sync_tag = [
+            "x-canonical-private-synchronous",
+            "synchronous",
+            "x-dunst-stack-tag",
+        ]
+        .iter()
+        .find_map(|key| hint_string(&hints, key));
+        let transient = transient || sync_tag.is_some();
+
         let notification = Notification {
             id: 0,
             app_name,
@@ -90,6 +109,8 @@ impl Server {
             urgency,
             timeout: Timeout::from_spec(expire_timeout),
             transient,
+            progress,
+            sync_tag,
             received_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_secs())

@@ -77,6 +77,12 @@ pub struct Notification {
     pub timeout: Timeout,
     /// The sender asked for this not to be kept in the history.
     pub transient: bool,
+    /// A level from 0 to 100 to draw as a bar, as volume and brightness
+    /// popups send.
+    pub progress: Option<u8>,
+    /// Notifications sharing a tag replace each other, so repeated
+    /// volume steps update one toast instead of stacking up.
+    pub sync_tag: Option<String>,
     /// When it arrived, in seconds since the Unix epoch.
     pub received_at: u64,
 }
@@ -100,6 +106,8 @@ impl Notification {
             // Critical notifications never time out by themselves,
             // whatever the sender asked for.
             (Urgency::Critical, _) | (_, Timeout::Never) => None,
+            // A level popup is glanced at, not read.
+            (_, Timeout::Default) if self.sync_tag.is_some() => Some(default_millis.min(1600)),
             (_, Timeout::Default) => Some(default_millis),
             // Keep even a very short request readable.
             (_, Timeout::Millis(ms)) => Some(ms.clamp(1500, 60_000)),
@@ -215,6 +223,18 @@ impl Store {
     /// the UI should do. With "do not disturb" on, only critical
     /// notifications are shown; the rest go straight to the history.
     pub fn add(&mut self, mut incoming: Notification, replaces_id: u32) -> (u32, Option<Change>) {
+        // A tagged notification replaces the one on screen with the
+        // same tag, whatever id the sender passed.
+        let replaces_id = incoming
+            .sync_tag
+            .as_ref()
+            .and_then(|tag| {
+                self.active
+                    .iter()
+                    .find(|n| n.sync_tag.as_ref() == Some(tag))
+            })
+            .map(|n| n.id)
+            .unwrap_or(replaces_id);
         let replacing = replaces_id != 0 && self.active.iter().any(|n| n.id == replaces_id);
         let id = if replaces_id != 0 {
             // Reuse the id even if the old one has gone, as the spec
@@ -322,6 +342,8 @@ mod tests {
             urgency: Urgency::Normal,
             timeout: Timeout::Default,
             transient: false,
+            progress: None,
+            sync_tag: None,
             received_at: 0,
         }
     }
@@ -356,6 +378,36 @@ mod tests {
         // The next fresh id must not collide with it.
         let (next, _) = store.add(note("after"), 0);
         assert_eq!(next, 8);
+    }
+
+    #[test]
+    fn tagged_notifications_replace_each_other() {
+        let mut store = Store::default();
+        let level = |percent: u8| {
+            let mut n = note("Volume");
+            n.sync_tag = Some("volume".into());
+            n.progress = Some(percent);
+            n.transient = true;
+            n
+        };
+        let (first, change) = store.add(level(40), 0);
+        assert!(matches!(change, Some(Change::Show(_))));
+        let (second, change) = store.add(level(45), 0);
+        assert_eq!(second, first, "the same toast is reused");
+        assert!(matches!(change, Some(Change::Replace(n)) if n.progress == Some(45)));
+        assert_eq!(store.active().len(), 1);
+
+        // A different tag is a different toast.
+        let mut brightness = note("Brightness");
+        brightness.sync_tag = Some("brightness".into());
+        let (other, change) = store.add(brightness, 0);
+        assert_ne!(other, first);
+        assert!(matches!(change, Some(Change::Show(_))));
+
+        // Level popups are glanced at: short display, no history.
+        assert_eq!(store.get(first).unwrap().display_millis(5000), Some(1600));
+        store.close(first);
+        assert_eq!(store.history().count(), 0);
     }
 
     #[test]

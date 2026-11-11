@@ -229,6 +229,41 @@ window.scuttle {
 .toast-title { font-size: 15px; font-weight: 600; color: $text; }
 .toast-body { font-size: 13px; color: $text_dim; }
 
+/* Level bars in toasts and the volume and brightness popup. */
+.scuttle progressbar trough {
+  min-height: 6px;
+  border-radius: 3px;
+  background-color: $wash_strong;
+  border: none;
+}
+
+.scuttle progressbar progress {
+  /* Some themes pull the fill outwards with negative margins. */
+  margin: 0;
+  min-height: 6px;
+  border-radius: 3px;
+  background-color: $accent;
+  border: none;
+}
+
+.osd {
+  background-color: $panel;
+  border: 1px solid $line;
+  border-radius: 30px;
+  padding: 18px 24px;
+  opacity: 0;
+  transform: translateY($travel);
+  transition: opacity $exit ease-in, transform $exit ease-in;
+}
+
+.osd.shown {
+  opacity: 1;
+  transform: none;
+  transition: opacity $dur ease-out, transform $dur $ease;
+}
+
+.osd-value { font-family: $font_display; font-size: 18px; font-weight: 300; }
+
 /* ---- Launcher ------------------------------------------------------- */
 
 .scrim {

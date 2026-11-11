@@ -4,7 +4,9 @@
 //! so the logic is tested against fixtures and never depends on the
 //! machine the tests run on.
 
+pub mod audio;
 pub mod battery;
+pub mod brightness;
 pub mod cpu;
 pub mod memory;
 pub mod network;

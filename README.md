@@ -57,7 +57,39 @@ Interface sounds use two optional packages you very likely already have on a Pip
 
 The default fonts are Geist, Geist Mono and Sora. They are optional: without them Scuttle falls back to Inter, then to whatever sans-serif you have. On Arch they are in the AUR as `otf-geist`, `otf-geist-mono` and `ttf-sora`. Inter is in the official repos as `inter-font`.
 
+## Install on top of dusky
+
+If you run [dusky](https://github.com/dusklinux/dusky), you do not need a fresh system. One script builds Scuttle and plugs it into dusky's own override folder, which dusky's updater never touches:
+
+```sh
+git clone https://github.com/Squandit/scuttle
+cd scuttle
+scripts/install-on-dusky.sh
+```
+
+Run it as your normal user from inside your Hyprland session. It asks for sudo once, only to install any missing packages. When it finishes, Scuttle is running and tapping Super opens the launcher.
+
+What it changes:
+
+- Adds `~/.config/hypr/edit_here/source/scuttle.lua` (autostart, the Super-tap key, blur rules) and one `require` line for it in `~/.config/hypr/edit_here/hyprland.lua`.
+- Comments out the Waybar autostart line in `~/.config/hypr/edit_here/source/autostart.lua`, since Scuttle draws the bar.
+- Disables the `mako` user service, since Scuttle shows notifications.
+
+Everything else in dusky stays as it is. Your rofi menus and keybinds still work. dusky's volume and brightness keys still work too: they send their popup as a notification, and Scuttle draws it with a level bar.
+
+`scripts/install-on-dusky.sh --keep-waybar` or `--keep-mako` leaves either one alone. `scripts/install-on-dusky.sh status` shows what is in place.
+
+To go back to plain dusky:
+
+```sh
+scripts/install-on-dusky.sh uninstall
+```
+
+That removes the Hyprland file and the `require` line, restores the Waybar line, turns mako back on and starts Waybar again. Originals are also backed up in `~/.local/state/scuttle/dusky/backup`.
+
 ## Set up Hyprland
+
+This section is for setups other than dusky.
 
 Scuttle prints the lines your Hyprland config needs:
 
