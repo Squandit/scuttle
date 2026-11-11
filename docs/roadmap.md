@@ -1,0 +1,38 @@
+# Roadmap
+
+What is planned and not built yet, roughly in order. The README lists what works today.
+
+## Next
+
+- **Volume and brightness popup.** Scuttle's own popup for the media keys, a volume widget on the bar (scroll to change, click to mute), and `scuttle volume` and `scuttle brightness` commands. The readers for both are already in `scuttle-sys`.
+- **Media widget on the bar.** Now playing, play and pause, from any MPRIS player. Check that it works with LiMusic in particular, and add whatever LiMusic needs if it does not speak MPRIS.
+- **One style across the desktop.** Export the current theme to GTK 3 and 4, Qt, the terminal (kitty, foot, alacritty), Hyprland borders, gaps and animation curves, and VS Code, so changing the accent in Scuttle changes all of them.
+- **Lock screen.**
+- **Settings app.** Every row shows the config line it writes, and edits the same `config.toml`.
+
+## After that
+
+- **Clipboard history and emoji picker** as launcher modes, with image previews and pinning.
+- **Screen capture.** Region, window and screen; record; colour picker; annotate; send a region to the assistant.
+- **Keybind editor.** Searchable list, rebind by pressing keys, conflict check, an overlay cheatsheet.
+- **Launcher extras.** Inline controls in results (a brightness slider when you type "bright"), open windows listed under an app, notification history as a mode.
+- **Wallpaper-generated theme** as an option beside the hand-made ones.
+- **Per-monitor workspaces** on the bar for multi-monitor setups.
+
+## Assistant panel
+
+A side panel, cloud only.
+
+- **Backends.** Use the `claude` command first so it runs on the user's Claude subscription, with Opus 5.5 as the default model there. When the subscription reports its limit is reached, fall back to the API key with Haiku 5.5 as the default, and switch back when the limit resets. Both models are changeable in settings. Whichever of the two a user has set up should work by itself.
+- **Abilities.** Control the desktop through Scuttle's own commands, with confirmation for anything risky. See a screen region or the focused window. Answer short questions inline in the launcher. Suggest terminal commands and run them after approval.
+- **Read aloud.** An optional button to speak an answer, and to speak selected text from the launcher, using Fish Audio. Off until a key is set.
+- **Keys.** API keys live in the system keyring. Never in the repo, the config file or logs.
+
+## Developer tools
+
+Make a development setup that uses Fusion, VS Code and KiCad nicer to work in. Ideas to explore when this comes up: launcher entries for recent projects in each, matching themes for VS Code and KiCad from the theme engine, window rules so their dialogs and tool palettes behave under tiling, and per-project workspace layouts.
+
+## Packaging
+
+- Publish the PKGBUILD to the AUR.
+- An install path for a fresh Arch system, once the shell is complete enough to be the whole desktop.

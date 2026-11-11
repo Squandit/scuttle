@@ -32,7 +32,7 @@ The battery widget only appears on machines that have a battery. A desktop PC ne
 
 ## What is not built yet
 
-Volume and brightness popups, the lock screen, the settings app, exporting the theme to GTK apps and terminals, the clipboard and emoji pickers, screen capture, the assistant panel, and the bar's media, volume and notification widgets. These are planned in roughly that order.
+Volume and brightness popups, the lock screen, the settings app, exporting the theme to GTK apps and terminals, the clipboard and emoji pickers, screen capture, the assistant panel, and the bar's media, volume and notification widgets. These are planned in roughly that order. [docs/roadmap.md](docs/roadmap.md) has the details.
 
 ## Install
 
