@@ -497,8 +497,10 @@ mod tests {
 
     #[test]
     fn ids_never_wrap_to_zero() {
-        let mut store = Store::default();
-        store.next_id = u32::MAX;
+        let mut store = Store {
+            next_id: u32::MAX,
+            ..Default::default()
+        };
         let (a, _) = store.add(note("a"), 0);
         let (b, _) = store.add(note("b"), 0);
         assert_eq!(a, u32::MAX);
