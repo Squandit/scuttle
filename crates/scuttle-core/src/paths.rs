@@ -58,6 +58,18 @@ pub fn socket_path() -> PathBuf {
     runtime_dir().join(format!("scuttle-{display}.sock"))
 }
 
+/// Where a wallpaper palette may be found, most likely first. These
+/// are the files matugen writes in a dusky setup and in its common
+/// standalone configurations.
+pub fn palette_candidates() -> Vec<PathBuf> {
+    let config = xdg("XDG_CONFIG_HOME", ".config");
+    vec![
+        config.join("matugen/generated/waybar-colors.css"),
+        config.join("matugen/generated/colors.css"),
+        config.join("scuttle/palette.css"),
+    ]
+}
+
 /// Directories that hold `.desktop` application entries, most specific
 /// first.
 pub fn application_dirs() -> Vec<PathBuf> {

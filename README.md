@@ -20,6 +20,8 @@ The battery widget only appears on machines that have a battery. A desktop PC ne
 
 **Themes.** Four built-in themes, each in dark and light: `ferris` (orange on warm charcoal, the default), `tide`, `dune` and `bone`. Set any accent colour you like and Scuttle picks text colours that stay readable on it.
 
+**One style across the desktop.** Scuttle works with [matugen](https://github.com/InioX/matugen), the tool dusky uses to colour GTK apps, terminals, Firefox and the rest from one palette. It goes both ways. Set `theme = "wallpaper"` and Scuttle takes its colours from matugen's palette, so it matches everything else and changes with the wallpaper. Or keep a built-in theme and run `scuttle theme push` to recolour everything else from Scuttle's accent. Either way, generated colours are checked for contrast and adjusted until text is readable.
+
 **Live config.** Save `config.toml` and the shell restyles itself. A mistake in the file is reported with the reason, and the previous settings stay in place.
 
 **Notifications.** Scuttle is its own notification daemon. Toasts slide in from a corner you choose, show the app's buttons, and pause their countdown while your pointer is on them. Critical ones stay until you dismiss them. A badge on the bar counts what you have not looked at, and do-not-disturb holds back everything except critical notifications.
@@ -36,7 +38,7 @@ The battery widget only appears on machines that have a battery. A desktop PC ne
 
 ## What is not built yet
 
-The lock screen, the settings app, exporting the theme to GTK apps and terminals, the clipboard and emoji pickers, screen capture, and the assistant panel. These are planned in roughly that order. [docs/roadmap.md](docs/roadmap.md) has the details.
+The lock screen, the settings app, the clipboard and emoji pickers, screen capture, and the assistant panel. These are planned in roughly that order. [docs/roadmap.md](docs/roadmap.md) has the details.
 
 ## Install
 
@@ -144,6 +146,8 @@ scuttle dismiss             # dismiss every notification on screen
 scuttle media toggle        # also: next, previous
 scuttle volume up           # also: down, mute, and --by 10 for bigger steps
 scuttle brightness down     # also: up
+scuttle theme show          # print the colours in use and where they come from
+scuttle theme push          # recolour other apps to match, through matugen
 scuttle reload              # re-read the config
 scuttle config check        # check the config for mistakes
 scuttle config example      # print the annotated example config
@@ -223,6 +227,27 @@ scripts/headless.sh ctl launcher "fire"
 scripts/headless.sh shot /tmp/launcher.png
 scripts/headless.sh stop
 ```
+
+## Matching the rest of your desktop
+
+There are two ways to get Scuttle and your other apps into one colour scheme. Both need matugen, which dusky already has set up.
+
+**Scuttle follows the wallpaper.** Put this in `~/.config/scuttle/config.toml`:
+
+```toml
+[appearance]
+theme = "wallpaper"
+```
+
+Scuttle then reads the palette matugen generated from your wallpaper and restyles itself every time that palette changes. `scuttle theme show` tells you which palette file it found.
+
+**Everything follows Scuttle.** Keep a built-in theme such as `ferris`, then run:
+
+```sh
+scuttle theme push
+```
+
+That hands Scuttle's accent colour to matugen, which recolours every app it themes. It lasts until you next change the wallpaper through your usual tool, which recolours from the wallpaper again. Using the wallpaper in this repo with the `ferris` theme gets you close to the same result without pushing.
 
 ## Wallpaper
 

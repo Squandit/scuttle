@@ -5,8 +5,14 @@
 # here. Scuttle reloads the file as soon as you save it.
 
 [appearance]
-# Built-in themes: "ferris", "tide", "dune", "bone".
+# Built-in themes: "ferris", "tide", "dune", "bone". Or "wallpaper" to
+# take the colours from your wallpaper palette, so Scuttle matches
+# everything else matugen themes. It updates when the wallpaper changes.
 theme = "ferris"
+# The palette file read by the "wallpaper" theme. Leave it out to use
+# matugen's usual output. Any file of "@define-color name #hex;" lines
+# with Material role names (primary, surface, on_surface) works.
+# palette_file = "/home/you/.config/matugen/generated/colors.css"
 # "dark" or "light".
 mode = "dark"
 # Override the theme's accent colour, e.g. accent = "#3355ff".

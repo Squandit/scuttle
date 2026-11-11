@@ -1,6 +1,8 @@
 //! Theme tokens: the single set of colours every Scuttle surface, and
 //! every exported app theme, is built from.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::color::Rgba;
@@ -198,14 +200,96 @@ impl Theme {
 /// Nudges `colour` towards `towards` until it reaches a 4.5:1 contrast
 /// ratio against `background`. Returns the first step that passes.
 fn readable_on(colour: Rgba, background: Rgba, towards: Rgba) -> Rgba {
-    const TARGET: f32 = 4.5;
+    nudge(colour, &[background], 4.5, towards)
+}
+
+/// Nudges `colour` towards `towards` until it reaches `target` contrast
+/// against every one of `backgrounds`.
+fn nudge(colour: Rgba, backgrounds: &[Rgba], target: f32, towards: Rgba) -> Rgba {
     for step in 0..=20 {
         let candidate = colour.mix(towards, step as f32 / 20.0);
-        if candidate.contrast(background) >= TARGET {
+        if backgrounds.iter().all(|b| candidate.contrast(*b) >= target) {
             return candidate;
         }
     }
     towards
+}
+
+/// The theme name that means "take the colours from the wallpaper
+/// palette on disk" instead of a built-in theme.
+pub const WALLPAPER: &str = "wallpaper";
+
+/// Reads `@define-color name #hex;` lines, the format GTK stylesheets
+/// use and matugen's colour templates write. Anything else is skipped.
+pub fn parse_define_colors(text: &str) -> HashMap<String, Rgba> {
+    let mut colors = HashMap::new();
+    for line in text.lines() {
+        let Some(rest) = line.trim().strip_prefix("@define-color") else {
+            continue;
+        };
+        let mut parts = rest.trim().trim_end_matches(';').split_whitespace();
+        let (Some(name), Some(value)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        if let Ok(color) = value.parse::<Rgba>() {
+            colors.insert(name.to_string(), color.with_alpha(1.0));
+        }
+    }
+    colors
+}
+
+impl Theme {
+    /// Builds a theme from a Material-style palette, as matugen
+    /// generates from a wallpaper. Returns `None` when the palette is
+    /// missing the roles a theme cannot do without.
+    ///
+    /// A generated palette comes with no promise about contrast, so
+    /// every text colour is checked against the backgrounds it sits on
+    /// and nudged until it is readable.
+    pub fn from_palette(colors: &HashMap<String, Rgba>) -> Option<Theme> {
+        let get = |names: &[&str]| names.iter().find_map(|n| colors.get(*n).copied());
+        let ground = get(&["surface_dim", "background", "surface"])?;
+        let surface = get(&["surface_container", "surface_container_low", "surface"])?;
+        let accent = get(&["primary"])?;
+        let raw_text = get(&["on_surface", "on_background"])?;
+
+        let dark = ground.luminance() < 0.2;
+        let mode = if dark { Mode::Dark } else { Mode::Light };
+        // The far end of the scale that text can always be pushed to.
+        let pole = if dark {
+            Rgba::rgb(255, 255, 255)
+        } else {
+            Rgba::rgb(0, 0, 0)
+        };
+        let both = [surface, ground];
+
+        let text = nudge(raw_text, &both, 7.0, pole);
+        let text_mid = nudge(
+            get(&["on_surface_variant"]).unwrap_or_else(|| text.mix(surface, 0.2)),
+            &both,
+            4.5,
+            text,
+        );
+        let text_dim = nudge(text_mid.mix(surface, 0.25), &both, 4.5, text);
+        let on_accent = match get(&["on_primary"]) {
+            Some(color) if color.contrast(accent) >= 4.5 => color,
+            _ => accent.best_on(Rgba::rgb(0x14, 0x10, 0x0c), Rgba::rgb(0xfb, 0xf8, 0xf4)),
+        };
+
+        Some(Theme {
+            name: WALLPAPER,
+            mode,
+            ground,
+            surface,
+            line: text.with_alpha(if dark { 0.10 } else { 0.12 }),
+            text,
+            text_mid,
+            text_dim,
+            accent,
+            on_accent,
+            accent_text: nudge(accent, &both, 4.5, text),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -253,6 +337,87 @@ mod tests {
                 "{id}: accent_text"
             );
         }
+    }
+
+    /// The roles matugen writes, for a wallpaper that is mostly orange.
+    const DARK_PALETTE: &str = "/*\n* Css Colors\n* Generated with Matugen\n*/\n\
+        @define-color background #1a110d;\n\
+        @define-color surface #1a110d;\n\
+        @define-color surface_dim #1a110d;\n\
+        @define-color surface_container #271d19;\n\
+        @define-color on_surface #f1dfd8;\n\
+        @define-color on_surface_variant #d8c2b8;\n\
+        @define-color primary #ffb597;\n\
+        @define-color on_primary #5a1c00;\n\
+        @define-color outline #a08d84;\n";
+
+    const LIGHT_PALETTE: &str = "@define-color background #fff8f6;\n\
+        @define-color surface #fff8f6;\n\
+        @define-color surface_dim #e8d6cf;\n\
+        @define-color surface_container #fceae3;\n\
+        @define-color on_surface #231a16;\n\
+        @define-color on_surface_variant #53443c;\n\
+        @define-color primary #9a4522;\n\
+        @define-color on_primary #ffffff;\n";
+
+    fn assert_readable(t: &Theme, id: &str) {
+        for background in [t.surface, t.ground] {
+            assert!(t.text.contrast(background) >= 7.0, "{id}: text");
+            assert!(t.text_mid.contrast(background) >= 4.5, "{id}: text_mid");
+            assert!(t.text_dim.contrast(background) >= 4.5, "{id}: text_dim");
+            assert!(
+                t.accent_text.contrast(background) >= 4.5,
+                "{id}: accent_text"
+            );
+        }
+        assert!(t.on_accent.contrast(t.accent) >= 4.5, "{id}: on_accent");
+    }
+
+    #[test]
+    fn reads_define_color_lines_and_skips_the_rest() {
+        let colors = parse_define_colors(DARK_PALETTE);
+        assert_eq!(colors.len(), 9);
+        assert_eq!(colors["primary"], "#ffb597".parse().unwrap());
+        let odd = "@define-color ok #112233\n@define-color bad notacolor;\n@define-color;\nbody { color: red; }\n";
+        let colors = parse_define_colors(odd);
+        assert_eq!(colors.len(), 1);
+        assert!(colors.contains_key("ok"));
+    }
+
+    #[test]
+    fn builds_a_dark_theme_from_a_wallpaper_palette() {
+        let t = Theme::from_palette(&parse_define_colors(DARK_PALETTE)).unwrap();
+        assert_eq!(t.name, WALLPAPER);
+        assert_eq!(t.mode, Mode::Dark);
+        assert_eq!(t.accent, "#ffb597".parse().unwrap());
+        assert_eq!(t.on_accent, "#5a1c00".parse().unwrap());
+        assert_eq!(t.surface, "#271d19".parse().unwrap());
+        assert_readable(&t, "dark palette");
+    }
+
+    #[test]
+    fn builds_a_light_theme_from_a_wallpaper_palette() {
+        let t = Theme::from_palette(&parse_define_colors(LIGHT_PALETTE)).unwrap();
+        assert_eq!(t.mode, Mode::Light);
+        assert_readable(&t, "light palette");
+    }
+
+    #[test]
+    fn a_low_contrast_palette_is_made_readable() {
+        // Grey text on grey: a palette nobody should ship, but a
+        // generator can produce one.
+        let muddy = "@define-color surface #404040;\n@define-color on_surface #6a6a6a;\n\
+            @define-color on_surface_variant #555555;\n@define-color primary #505050;\n\
+            @define-color on_primary #555555;\n";
+        let t = Theme::from_palette(&parse_define_colors(muddy)).unwrap();
+        assert_readable(&t, "muddy palette");
+    }
+
+    #[test]
+    fn a_palette_missing_core_roles_is_refused() {
+        assert!(Theme::from_palette(&HashMap::new()).is_none());
+        let no_accent = "@define-color surface #111111;\n@define-color on_surface #eeeeee;\n";
+        assert!(Theme::from_palette(&parse_define_colors(no_accent)).is_none());
     }
 
     #[test]

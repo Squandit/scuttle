@@ -3,7 +3,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -62,6 +62,10 @@ pub struct Shell {
     tx: Sender<Msg>,
     /// Keeps the config file watcher alive.
     watcher: RefCell<Option<gio::FileMonitor>>,
+    /// Watches the wallpaper palette while the theme follows it.
+    palette_watcher: RefCell<Option<(PathBuf, gio::FileMonitor)>>,
+    /// A handle to this shell for callbacks set up after start.
+    this: RefCell<Weak<Shell>>,
     reload_pending: Cell<bool>,
 }
 
@@ -200,8 +204,13 @@ impl Shell {
             stats: RefCell::new(stats),
             tx: tx.clone(),
             watcher: RefCell::new(None),
+            palette_watcher: RefCell::new(None),
+            this: RefCell::new(Weak::new()),
             reload_pending: Cell::new(false),
         });
+
+        *shell.this.borrow_mut() = Rc::downgrade(&shell);
+        shell.watch_palette();
 
         shell.overlay.on_internal({
             let weak = Rc::downgrade(&shell);
@@ -527,6 +536,7 @@ impl Shell {
         let roots_changed = new.launcher.file_roots != self.config.borrow().launcher.file_roots;
         *self.config.borrow_mut() = new;
         self.restyle();
+        self.watch_palette();
         self.rebuild_bars();
         if roots_changed {
             self.index_files();
@@ -580,6 +590,51 @@ impl Shell {
         *self.bars.borrow_mut() = bars;
         drop(config);
         self.update_badges();
+    }
+
+    /// While the theme follows the wallpaper, restyles whenever the
+    /// palette file is rewritten, which is what happens when the
+    /// wallpaper changes. With any other theme nothing is watched.
+    fn watch_palette(&self) {
+        let wanted = {
+            let config = self.config.borrow();
+            (config.appearance.theme == scuttle_core::theme::WALLPAPER)
+                .then(|| config.palette_path())
+                .flatten()
+        };
+        let current = self
+            .palette_watcher
+            .borrow()
+            .as_ref()
+            .map(|(path, _)| path.clone());
+        if wanted == current {
+            return;
+        }
+        *self.palette_watcher.borrow_mut() = None;
+        let Some(path) = wanted else { return };
+        let Ok(monitor) = gio::File::for_path(&path)
+            .monitor_file(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE)
+        else {
+            return;
+        };
+        let weak = self.this.borrow().clone();
+        let pending = Rc::new(Cell::new(false));
+        monitor.connect_changed(move |_, _, _, _| {
+            // A palette is written in one go but can fire several
+            // events. Fold them into one restyle.
+            if pending.replace(true) {
+                return;
+            }
+            let weak = weak.clone();
+            let pending = Rc::clone(&pending);
+            glib::timeout_add_local_once(Duration::from_millis(200), move || {
+                pending.set(false);
+                if let Some(shell) = weak.upgrade() {
+                    shell.restyle();
+                }
+            });
+        });
+        *self.palette_watcher.borrow_mut() = Some((path, monitor));
     }
 
     /// Reloads automatically when config.toml is saved.

@@ -88,6 +88,11 @@ enum Command {
         #[arg(long)]
         legacy: bool,
     },
+    /// Inspect the theme, or apply its colours to the rest of the desktop
+    Theme {
+        #[command(subcommand)]
+        action: ThemeAction,
+    },
     /// Inspect the config file
     Config {
         #[command(subcommand)]
@@ -142,6 +147,14 @@ enum SwitchArg {
 }
 
 #[derive(Subcommand)]
+enum ThemeAction {
+    /// Print the colours in use and where they come from
+    Show,
+    /// Recolour the rest of the desktop to match, through matugen
+    Push,
+}
+
+#[derive(Subcommand)]
 enum ConfigAction {
     /// Print where the config file is
     Path,
@@ -158,6 +171,7 @@ fn main() -> ExitCode {
     let request = match cli.command.unwrap_or(Command::Run) {
         Command::Run => return run(config_path),
         Command::Config { action } => return config_command(action, config_path),
+        Command::Theme { action } => return theme_command(action, config_path),
         Command::Hyprland { legacy } => {
             print!(
                 "{}",
@@ -222,6 +236,97 @@ fn main() -> ExitCode {
         Err(_) => {
             eprintln!("Scuttle is not running in this session. Start it with `scuttle`.");
             ExitCode::FAILURE
+        }
+    }
+}
+
+/// The matugen command line that recolours the desktop from one colour.
+fn matugen_args(accent: scuttle_core::Rgba, mode: scuttle_core::theme::Mode) -> Vec<String> {
+    let mode = match mode {
+        scuttle_core::theme::Mode::Dark => "dark",
+        scuttle_core::theme::Mode::Light => "light",
+    };
+    vec![
+        format!("--mode={mode}"),
+        "color".to_string(),
+        "hex".to_string(),
+        accent.hex(),
+    ]
+}
+
+fn theme_command(action: ThemeAction, path: PathBuf) -> ExitCode {
+    let config = match Config::load(&path) {
+        Ok(config) => config,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let theme = config.theme();
+    let follows_wallpaper = config.appearance.theme == scuttle_core::theme::WALLPAPER;
+
+    match action {
+        ThemeAction::Show => {
+            println!("theme        {} ({:?})", theme.name, theme.mode);
+            if follows_wallpaper {
+                match config.palette_path() {
+                    Some(file) if theme.name == scuttle_core::theme::WALLPAPER => {
+                        println!("palette      {}", file.display())
+                    }
+                    Some(file) => println!(
+                        "palette      {} could not be used, so the default theme is showing",
+                        file.display()
+                    ),
+                    None => println!(
+                        "palette      no palette file was found, so the default theme is showing"
+                    ),
+                }
+            }
+            for (name, colour) in [
+                ("ground", theme.ground),
+                ("surface", theme.surface),
+                ("text", theme.text),
+                ("text_mid", theme.text_mid),
+                ("text_dim", theme.text_dim),
+                ("accent", theme.accent),
+                ("on_accent", theme.on_accent),
+                ("accent_text", theme.accent_text),
+            ] {
+                println!("{name:<12} {}", colour.hex());
+            }
+            ExitCode::SUCCESS
+        }
+        ThemeAction::Push => {
+            if follows_wallpaper {
+                eprintln!(
+                    "The theme already follows the wallpaper palette, so there is nothing to push. \
+                     Pick a built-in theme first if you want its colour everywhere."
+                );
+                return ExitCode::FAILURE;
+            }
+            let args = matugen_args(theme.accent, theme.mode);
+            println!("Running: matugen {}", args.join(" "));
+            match std::process::Command::new("matugen").args(&args).status() {
+                Ok(status) if status.success() => {
+                    println!(
+                        "Done. Apps themed by matugen now use {}. Changing the wallpaper \
+                         through your usual tool will recolour them from the wallpaper again.",
+                        theme.accent.hex()
+                    );
+                    ExitCode::SUCCESS
+                }
+                Ok(status) => {
+                    eprintln!("matugen stopped with an error ({status}).");
+                    ExitCode::FAILURE
+                }
+                Err(_) => {
+                    eprintln!(
+                        "matugen is not installed. It is what recolours other apps; \
+                         dusky ships it, and it is in the AUR as matugen-bin."
+                    );
+                    ExitCode::FAILURE
+                }
+            }
         }
     }
 }
@@ -345,6 +450,17 @@ mod tests {
                 assert!(snippet.contains(command), "{command} has no key");
             }
         }
+    }
+
+    #[test]
+    fn theme_push_builds_the_matugen_command() {
+        use scuttle_core::theme::Mode;
+        let orange = "#f74c00".parse().unwrap();
+        assert_eq!(
+            matugen_args(orange, Mode::Dark),
+            ["--mode=dark", "color", "hex", "#f74c00"]
+        );
+        assert_eq!(matugen_args(orange, Mode::Light)[0], "--mode=light");
     }
 
     #[test]

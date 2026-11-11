@@ -246,6 +246,10 @@ do_install() {
     disable_mako
     start_scuttle
     step "Done"
+    say "To make Scuttle take its colours from your wallpaper like the rest of dusky,"
+    say "add this to ~/.config/scuttle/config.toml:"
+    say "    [appearance]"
+    say "    theme = \"wallpaper\""
     say "To undo all of this: $ROOT/scripts/install-on-dusky.sh uninstall"
 }
 

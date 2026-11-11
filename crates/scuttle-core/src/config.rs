@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::color::Rgba;
 use crate::motion::Motion;
-use crate::theme::{Mode, Theme};
+use crate::theme::{Mode, Theme, WALLPAPER};
 
 /// Everything in `config.toml`.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
@@ -31,8 +31,13 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Appearance {
-    /// Name of a built-in theme.
+    /// Name of a built-in theme, or "wallpaper" to take the colours
+    /// from the palette file.
     pub theme: String,
+    /// The palette file read when `theme = "wallpaper"`: lines of
+    /// `@define-color name #hex;`. Unset means look in the usual
+    /// matugen locations.
+    pub palette_file: Option<PathBuf>,
     pub mode: Mode,
     /// Overrides the theme's accent colour.
     pub accent: Option<Rgba>,
@@ -56,6 +61,7 @@ impl Default for Appearance {
     fn default() -> Self {
         Self {
             theme: "ferris".into(),
+            palette_file: None,
             mode: Mode::Dark,
             accent: None,
             radius: 18,
@@ -332,9 +338,9 @@ impl Config {
     pub fn validate(&self) -> Result<(), ConfigError> {
         let bad = |msg: String| Err(ConfigError::Invalid(msg));
         let a = &self.appearance;
-        if Theme::builtin(&a.theme, a.mode).is_none() {
+        if a.theme != WALLPAPER && Theme::builtin(&a.theme, a.mode).is_none() {
             return bad(format!(
-                "appearance.theme = \"{}\" is not a theme. Choose one of: {}.",
+                "appearance.theme = \"{}\" is not a theme. Choose one of: {}, {WALLPAPER}.",
                 a.theme,
                 crate::theme::BUILTIN.join(", ")
             ));
@@ -401,10 +407,31 @@ impl Config {
         Ok(())
     }
 
+    /// The palette file to read for the "wallpaper" theme: the one
+    /// named in the config, else the first usual location that exists.
+    pub fn palette_path(&self) -> Option<PathBuf> {
+        match &self.appearance.palette_file {
+            Some(path) => Some(path.clone()),
+            None => crate::paths::palette_candidates()
+                .into_iter()
+                .find(|p| p.is_file()),
+        }
+    }
+
     /// The theme this config selects, with any accent override applied.
+    ///
+    /// The "wallpaper" theme is read from the palette file. If that
+    /// file is missing or unusable, the default theme is used so the
+    /// shell always has colours.
     pub fn theme(&self) -> Theme {
         let a = &self.appearance;
-        let theme = Theme::builtin(&a.theme, a.mode)
+        let from_wallpaper = (a.theme == WALLPAPER)
+            .then(|| self.palette_path())
+            .flatten()
+            .and_then(|path| fs::read_to_string(path).ok())
+            .and_then(|text| Theme::from_palette(&crate::theme::parse_define_colors(&text)));
+        let theme = from_wallpaper
+            .or_else(|| Theme::builtin(&a.theme, a.mode))
             .or_else(|| Theme::builtin("ferris", a.mode))
             .expect("the default theme always exists");
         match a.accent {
@@ -488,6 +515,38 @@ mod tests {
     fn modules_parse_by_lowercase_name() {
         let c = Config::parse("[bar]\nright = [\"battery\", \"clock\"]\n").unwrap();
         assert_eq!(c.bar.right, vec![Module::Battery, Module::Clock]);
+    }
+
+    #[test]
+    fn wallpaper_theme_reads_the_palette_file() {
+        let dir = std::env::temp_dir().join(format!("scuttle-palette-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("colors.css");
+        fs::write(
+            &file,
+            "@define-color surface #1a110d;\n@define-color surface_container #271d19;\n\
+             @define-color on_surface #f1dfd8;\n@define-color primary #ffb597;\n\
+             @define-color on_primary #5a1c00;\n",
+        )
+        .unwrap();
+        let mut c = Config::default();
+        c.appearance.theme = "wallpaper".into();
+        c.appearance.palette_file = Some(file.clone());
+        c.validate().unwrap();
+        assert_eq!(c.theme().name, "wallpaper");
+        assert_eq!(c.theme().accent, "#ffb597".parse().unwrap());
+
+        // An accent set in the config still wins.
+        c.appearance.accent = Some("#3355ff".parse().unwrap());
+        assert_eq!(c.theme().accent, "#3355ff".parse().unwrap());
+        c.appearance.accent = None;
+
+        // A missing or broken palette falls back to the default theme.
+        fs::write(&file, "not a palette").unwrap();
+        assert_eq!(c.theme().name, "ferris");
+        c.appearance.palette_file = Some(dir.join("missing.css"));
+        assert_eq!(c.theme().name, "ferris");
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
