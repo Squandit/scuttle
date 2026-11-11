@@ -20,6 +20,7 @@ use scuttle_sound::{Feedback, Sound};
 
 use crate::actions;
 use crate::msg::{DesktopState, Stats};
+use crate::scale::px;
 
 /// Width of the launcher column on screens wide enough to fit it.
 const PANEL_WIDTH: i32 = 980;
@@ -135,12 +136,12 @@ impl Overlay {
         panel.add_css_class("launcher");
         panel.set_halign(gtk::Align::Center);
         panel.set_valign(gtk::Align::Start);
-        panel.set_margin_top(150);
-        panel.set_width_request(PANEL_WIDTH);
+        panel.set_margin_top(px(150));
+        panel.set_width_request(px(PANEL_WIDTH));
         scrim.set_child(Some(&panel));
 
         // Search row.
-        let search = gtk::Box::new(gtk::Orientation::Horizontal, 14);
+        let search = gtk::Box::new(gtk::Orientation::Horizontal, px(14));
         search.add_css_class("search-row");
         let mode_chip = gtk::Label::new(None);
         mode_chip.add_css_class("mode-chip");
@@ -155,12 +156,12 @@ impl Overlay {
         panel.append(&search);
 
         // Results and detail.
-        let body = gtk::Box::new(gtk::Orientation::Horizontal, 20);
-        body.set_margin_top(20);
+        let body = gtk::Box::new(gtk::Orientation::Horizontal, px(20));
+        body.set_margin_top(px(20));
         panel.append(&body);
 
         let left = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        left.set_width_request(LIST_WIDTH);
+        left.set_width_request(px(LIST_WIDTH));
         let list = gtk::ListBox::new();
         list.add_css_class("results");
         list.set_selection_mode(gtk::SelectionMode::Single);
@@ -168,26 +169,26 @@ impl Overlay {
         let scroller = gtk::ScrolledWindow::new();
         scroller.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
         scroller.set_propagate_natural_height(true);
-        scroller.set_max_content_height(460);
+        scroller.set_max_content_height(px(460));
         scroller.set_child(Some(&list));
         let empty = gtk::Label::new(Some("Nothing matches. Enter searches the web."));
         empty.add_css_class("hint");
         empty.set_xalign(0.0);
-        empty.set_margin_start(14);
-        empty.set_margin_top(10);
+        empty.set_margin_start(px(14));
+        empty.set_margin_top(px(10));
         empty.set_visible(false);
         left.append(&scroller);
         left.append(&empty);
         body.append(&left);
 
-        let detail = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        let detail = gtk::Box::new(gtk::Orientation::Vertical, px(6));
         detail.add_css_class("detail");
         detail.set_hexpand(true);
         detail.set_valign(gtk::Align::Start);
         let detail_icon = gtk::Image::new();
-        detail_icon.set_pixel_size(48);
+        detail_icon.set_pixel_size(px(48));
         detail_icon.set_halign(gtk::Align::Start);
-        detail_icon.set_margin_bottom(8);
+        detail_icon.set_margin_bottom(px(8));
         let label = |class: &str| {
             let l = gtk::Label::new(None);
             l.add_css_class(class);
@@ -199,7 +200,7 @@ impl Overlay {
         let detail_title = label("detail-title");
         let detail_sub = label("detail-sub");
         let detail_action = label("detail-action");
-        detail_action.set_margin_top(18);
+        detail_action.set_margin_top(px(18));
         let detail_command = label("detail-key");
         detail_command.set_lines(3);
         detail_command.set_ellipsize(pango::EllipsizeMode::End);
@@ -211,8 +212,8 @@ impl Overlay {
         body.append(&detail);
 
         // Footer.
-        let footer = gtk::Box::new(gtk::Orientation::Horizontal, 16);
-        footer.set_margin_top(22);
+        let footer = gtk::Box::new(gtk::Orientation::Horizontal, px(16));
+        footer.set_margin_top(px(22));
         let prefixes = gtk::Label::new(Some("> system    / files    ? web    = calc    @ windows"));
         prefixes.add_css_class("hint");
         prefixes.add_css_class("mono");
@@ -229,14 +230,14 @@ impl Overlay {
 
         // Corner status, used when the bar is turned off.
         let corner = |h: gtk::Align, v: gtk::Align| {
-            let b = gtk::Box::new(gtk::Orientation::Vertical, 6);
+            let b = gtk::Box::new(gtk::Orientation::Vertical, px(6));
             b.add_css_class("glance");
             b.set_halign(h);
             b.set_valign(v);
-            b.set_margin_top(40);
-            b.set_margin_bottom(40);
-            b.set_margin_start(48);
-            b.set_margin_end(48);
+            b.set_margin_top(px(40));
+            b.set_margin_bottom(px(40));
+            b.set_margin_start(px(48));
+            b.set_margin_end(px(48));
             b.set_can_target(false);
             b
         };
@@ -415,6 +416,9 @@ impl Overlay {
         inner
             .exit_ms
             .set(config.effective_motion(on_battery).exit_ms());
+        // Sizes set from code follow the size setting when it changes.
+        inner.scroller.set_width_request(px(LIST_WIDTH));
+        inner.detail_icon.set_pixel_size(px(48));
         let show_glance = config.bar.position == BarPosition::None;
         for corner in &inner.glance.corners {
             corner.set_visible(show_glance);
@@ -502,7 +506,7 @@ impl Overlay {
             lines.push(("Memory", memory.used_label()));
         }
         for (key, value) in lines {
-            let row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, px(6));
             row.set_halign(gtk::Align::End);
             let k = gtk::Label::new(Some(key));
             k.add_css_class("dim");
@@ -638,10 +642,21 @@ impl Overlay {
             if wanted.is_some() {
                 inner.window.set_monitor(Some(&monitor));
             }
-            let width = monitor.geometry().width();
+            let geometry = monitor.geometry();
+            let (width, height) = (geometry.width(), geometry.height());
             inner
                 .panel
-                .set_width_request(PANEL_WIDTH.min(width - 96).max(360));
+                .set_width_request(px(PANEL_WIDTH).min(width - px(96)).max(360));
+            // Fit the height too: on a short screen, or at a large
+            // size setting, start higher up and let the results scroll
+            // instead of running off the bottom.
+            let top = px(150).min(height / 7);
+            inner.panel.set_margin_top(top);
+            // Search row, the gaps around the results, the footer and
+            // some room to breathe at the bottom.
+            let chrome = px(88 + 20 + 22 + 24 + 40);
+            let room = (height - top - chrome).clamp(px(96), px(460));
+            inner.scroller.set_max_content_height(room);
         }
     }
 
@@ -846,11 +861,11 @@ fn set_icon(image: &gtk::Image, icon: Option<&str>) {
 
 fn build_row(item: &Item) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
-    let content = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+    let content = gtk::Box::new(gtk::Orientation::Horizontal, px(12));
     content.add_css_class("result");
 
     let icon = gtk::Image::new();
-    icon.set_pixel_size(20);
+    icon.set_pixel_size(px(20));
     set_icon(&icon, item.icon.as_deref());
     content.append(&icon);
 

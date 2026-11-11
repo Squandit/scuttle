@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::scale::px;
 use gtk::glib;
 use gtk::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
@@ -78,16 +79,16 @@ impl Osd {
         window.set_layer(Layer::Overlay);
         window.set_keyboard_mode(KeyboardMode::None);
         window.set_anchor(Edge::Bottom, true);
-        window.set_margin(Edge::Bottom, 80);
+        window.set_margin(Edge::Bottom, px(80));
         // Clicks go straight through to whatever is underneath.
         window.set_can_target(false);
 
-        let pill = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+        let pill = gtk::Box::new(gtk::Orientation::Horizontal, px(16));
         pill.add_css_class("osd");
-        pill.set_width_request(400);
+        pill.set_width_request(px(400));
 
         let icon = gtk::Image::new();
-        icon.set_pixel_size(20);
+        icon.set_pixel_size(px(20));
         let bar = gtk::ProgressBar::new();
         bar.set_hexpand(true);
         bar.set_valign(gtk::Align::Center);
@@ -116,6 +117,8 @@ impl Osd {
     }
 
     pub fn apply_config(&self, config: &Config, on_battery: bool) {
+        self.0.window.set_margin(Edge::Bottom, px(80));
+        self.0.pill.set_width_request(px(400));
         self.0
             .exit_ms
             .set(config.effective_motion(on_battery).exit_ms());

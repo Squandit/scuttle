@@ -146,13 +146,17 @@ hl.bind(
     { description = "Scuttle launcher", release = true }
 )
 
--- Blur what is behind Scuttle's translucent panels.
+-- Blur what is behind Scuttle's translucent panels. no_anim turns off
+-- Hyprland's own open and close animation for them: Scuttle animates
+-- them itself, and the two together show as a rectangle growing behind
+-- the launcher.
 for _, surface in ipairs({ "scuttle-bar", "scuttle-launcher", "scuttle-toasts", "scuttle-osd" }) do
     hl.layer_rule({
         name = surface,
         match = { namespace = surface },
         blur = true,
         ignore_alpha = 0.3,
+        no_anim = true,
     })
 end
 EOF

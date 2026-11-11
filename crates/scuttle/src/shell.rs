@@ -115,6 +115,8 @@ impl Shell {
             settings.set_gtk_entry_select_on_focus(false);
         }
 
+        crate::scale::set(config.appearance.scale);
+
         let provider = gtk::CssProvider::new();
         provider.load_from_string(&css::stylesheet(&config.theme(), &config, on_battery));
         gtk::style_context_add_provider_for_display(
@@ -454,6 +456,7 @@ impl Shell {
     /// Regenerates the stylesheet from the current config and power state.
     fn restyle(&self) {
         let config = self.config.borrow();
+        crate::scale::set(config.appearance.scale);
         let on_battery = self.on_battery();
         self.provider
             .load_from_string(&css::stylesheet(&config.theme(), &config, on_battery));

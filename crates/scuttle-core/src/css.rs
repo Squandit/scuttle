@@ -83,7 +83,66 @@ pub fn stylesheet(theme: &Theme, config: &Config, on_battery: bool) -> String {
         ),
         ("ease", motion.css_ease()),
     ];
-    fill(TEMPLATE, tokens)
+    scale_px(&fill(TEMPLATE, tokens), config.appearance.scale)
+}
+
+/// Rounds a base size in pixels to the size it has at `scale`.
+///
+/// Hairlines stay one pixel so borders remain crisp, and nothing that
+/// was visible is ever scaled away to zero.
+pub fn scaled(base: f32, scale: f32) -> i32 {
+    if base.abs() <= 1.0 {
+        return base.round() as i32;
+    }
+    let value = (base * scale).round() as i32;
+    if value == 0 {
+        base.signum() as i32
+    } else {
+        value
+    }
+}
+
+/// Multiplies every `px` length in a stylesheet by `scale`.
+fn scale_px(css: &str, scale: f32) -> String {
+    if (scale - 1.0).abs() < 0.001 {
+        return css.to_string();
+    }
+    let bytes = css.as_bytes();
+    let mut out = String::with_capacity(css.len() + 64);
+    let mut i = 0;
+    while i < bytes.len() {
+        let c = bytes[i];
+        let starts_number = c.is_ascii_digit()
+            && (i == 0
+                || !(bytes[i - 1].is_ascii_alphanumeric()
+                    || bytes[i - 1] == b'.'
+                    || bytes[i - 1] == b'#'
+                    || bytes[i - 1] == b'_'));
+        if !starts_number {
+            // Copy one whole character, which may be several bytes.
+            let end = (i + 1..=bytes.len())
+                .find(|&j| css.is_char_boundary(j))
+                .unwrap_or(bytes.len());
+            out.push_str(&css[i..end]);
+            i = end;
+            continue;
+        }
+        let mut end = i;
+        while end < bytes.len() && (bytes[end].is_ascii_digit() || bytes[end] == b'.') {
+            end += 1;
+        }
+        let number = &css[i..end];
+        if css[end..].starts_with("px") {
+            match number.parse::<f32>() {
+                Ok(value) => out.push_str(&scaled(value, scale).to_string()),
+                Err(_) => out.push_str(number),
+            }
+        } else {
+            out.push_str(number);
+        }
+        i = end;
+    }
+    out
 }
 
 /// Replaces every `$name` in `template`. Longer names are substituted
@@ -477,6 +536,42 @@ mod tests {
         let css = sheet(&c, false);
         assert!(!css.contains("color: red\""));
         assert!(css.contains("\"Evil color red\""));
+    }
+
+    #[test]
+    fn scale_multiplies_pixel_lengths_only() {
+        let css = "a { font-size: 13px; padding: 0 12px 4px; opacity: 0.5; transition: x 170ms; color: #f74c00; }";
+        assert_eq!(
+            scale_px(css, 2.0),
+            "a { font-size: 26px; padding: 0 24px 8px; opacity: 0.5; transition: x 340ms; color: #f74c00; }"
+                .replace("340ms", "170ms")
+        );
+    }
+
+    #[test]
+    fn hairlines_stay_one_pixel() {
+        assert_eq!(
+            scale_px("border: 1px solid; margin: -1px;", 2.0),
+            "border: 1px solid; margin: -1px;"
+        );
+        assert_eq!(scaled(1.0, 2.5), 1);
+        assert_eq!(scaled(2.0, 1.5), 3);
+        assert_eq!(scaled(0.0, 2.0), 0);
+        assert_eq!(scaled(3.0, 0.1), 1, "never scaled away to nothing");
+    }
+
+    #[test]
+    fn scale_of_one_changes_nothing() {
+        let mut c = Config::default();
+        c.appearance.scale = 1.0;
+        let plain = sheet(&c, false);
+        assert!(plain.contains("font-size: 13px"));
+        c.appearance.scale = 1.5;
+        let bigger = sheet(&c, false);
+        assert!(bigger.contains("font-size: 20px"), "13px text becomes 20px");
+        assert!(!bigger.contains("font-size: 13px"));
+        // Colours and timings must come through untouched.
+        assert!(bigger.contains("#f74c00") && bigger.contains("170ms"));
     }
 
     #[test]

@@ -38,6 +38,9 @@ pub struct Appearance {
     pub accent: Option<Rgba>,
     /// Corner radius of panels, in pixels.
     pub radius: u32,
+    /// Size of everything Scuttle draws, as a multiple of the base
+    /// design size: text, the bar, the launcher, spacing.
+    pub scale: f32,
     /// Ask the compositor to blur what is behind translucent panels.
     pub blur: bool,
     pub motion: Motion,
@@ -56,6 +59,7 @@ impl Default for Appearance {
             mode: Mode::Dark,
             accent: None,
             radius: 18,
+            scale: 1.25,
             blur: true,
             motion: Motion::Subtle,
             font: "Geist".into(),
@@ -335,6 +339,12 @@ impl Config {
                 crate::theme::BUILTIN.join(", ")
             ));
         }
+        if !(0.75..=2.5).contains(&a.scale) {
+            return bad(format!(
+                "appearance.scale = {} is out of range. Use 0.75 to 2.5.",
+                a.scale
+            ));
+        }
         if a.radius > 32 {
             return bad(format!(
                 "appearance.radius = {} is too large. Use 0 to 32.",
@@ -478,6 +488,18 @@ mod tests {
     fn modules_parse_by_lowercase_name() {
         let c = Config::parse("[bar]\nright = [\"battery\", \"clock\"]\n").unwrap();
         assert_eq!(c.bar.right, vec![Module::Battery, Module::Clock]);
+    }
+
+    #[test]
+    fn scale_is_validated() {
+        assert_eq!(Config::default().appearance.scale, 1.25);
+        let c = Config::parse("[appearance]\nscale = 1.5\n").unwrap();
+        assert_eq!(c.appearance.scale, 1.5);
+        let err = Config::parse("[appearance]\nscale = 9\n")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("0.75 to 2.5"), "{err}");
+        assert!(Config::parse("[appearance]\nscale = 0\n").is_err());
     }
 
     #[test]

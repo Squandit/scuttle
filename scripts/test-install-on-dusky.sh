@@ -60,6 +60,7 @@ check "writes scuttle.lua" test -f "$OURS"
 check "scuttle.lua starts the installed binary" grep -qF "local scuttle = \"$HOME1/bin/scuttle\"" "$OURS"
 check "scuttle.lua binds the Super tap" grep -qF '"Super_L"' "$OURS"
 check "scuttle.lua blurs every Scuttle surface" grep -qF '"scuttle-bar", "scuttle-launcher", "scuttle-toasts", "scuttle-osd"' "$OURS"
+check "scuttle.lua turns off Hyprland's layer animation" grep -qF 'no_anim = true' "$OURS"
 check "loader requires scuttle.lua once" test "$(grep -cF 'require("edit_here.source.scuttle")' "$LOADER")" = 1
 check "loader keeps its other requires" grep -qF 'require("edit_here.source.keybinds")' "$LOADER"
 check "Waybar line is commented out" grep -qF -- '-- [scuttle] hl.exec_cmd("$HOME/user_scripts/waybar/waybar_toggle.sh")' "$AUTOSTART"

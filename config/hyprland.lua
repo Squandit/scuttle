@@ -22,30 +22,15 @@ hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("scuttle brightness down"), hel
 
 -- Blur what is behind Scuttle's translucent panels. ignore_alpha keeps
 -- the fully transparent gaps around the bar from being blurred too.
-hl.layer_rule({
-    name = "scuttle-bar",
-    match = { namespace = "scuttle-bar" },
-    blur = true,
-    ignore_alpha = 0.3,
-})
-
-hl.layer_rule({
-    name = "scuttle-launcher",
-    match = { namespace = "scuttle-launcher" },
-    blur = true,
-    ignore_alpha = 0.3,
-})
-
-hl.layer_rule({
-    name = "scuttle-toasts",
-    match = { namespace = "scuttle-toasts" },
-    blur = true,
-    ignore_alpha = 0.3,
-})
-
-hl.layer_rule({
-    name = "scuttle-osd",
-    match = { namespace = "scuttle-osd" },
-    blur = true,
-    ignore_alpha = 0.3,
-})
+-- no_anim turns off Hyprland's own open and close animation for these
+-- surfaces: Scuttle animates them itself, and the two together show as
+-- a rectangle growing behind the launcher.
+for _, surface in ipairs({ "scuttle-bar", "scuttle-launcher", "scuttle-toasts", "scuttle-osd" }) do
+    hl.layer_rule({
+        name = surface,
+        match = { namespace = surface },
+        blur = true,
+        ignore_alpha = 0.3,
+        no_anim = true,
+    })
+end

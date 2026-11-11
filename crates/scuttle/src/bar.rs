@@ -14,6 +14,7 @@ use scuttle_launcher::engine::pretty_class;
 use scuttle_sys::audio::{Volume, VolumeChange};
 
 use crate::msg::{DesktopState, Stats};
+use crate::scale::px;
 
 /// Workspace buttons and the ids they currently show.
 struct Workspaces {
@@ -26,7 +27,7 @@ struct Workspaces {
 
 impl Workspaces {
     fn new(always: u32, hypr: Option<Hyprland>) -> Workspaces {
-        let container = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        let container = gtk::Box::new(gtk::Orientation::Horizontal, px(4));
         container.set_valign(gtk::Align::Center);
         Workspaces {
             container,
@@ -89,7 +90,7 @@ fn set_class(widget: &impl IsA<gtk::Widget>, class: &str, on: bool) {
 
 /// A "key value" pair in monospace, e.g. `cpu 12%`.
 fn stat(key: &str) -> (gtk::Box, gtk::Label) {
-    let row = gtk::Box::new(gtk::Orientation::Horizontal, 5);
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, px(5));
     row.add_css_class("module");
     let key = gtk::Label::new(Some(key));
     key.add_css_class("key");
@@ -145,10 +146,10 @@ impl Bar {
             // Stretch across the screen. A notch stays centred instead.
             window.set_anchor(Edge::Left, true);
             window.set_anchor(Edge::Right, true);
-            let margin = bar_config.margin as i32;
+            let margin = px(bar_config.margin as i32);
             window.set_margin(edge, margin);
-            window.set_margin(Edge::Left, margin.max(2) + 2);
-            window.set_margin(Edge::Right, margin.max(2) + 2);
+            window.set_margin(Edge::Left, margin.max(2) + px(2));
+            window.set_margin(Edge::Right, margin.max(2) + px(2));
         }
         window.auto_exclusive_zone_enable();
 
@@ -166,7 +167,7 @@ impl Bar {
         };
 
         let section = |modules: &[Module], bar: &mut Bar, align: gtk::Align| -> gtk::Box {
-            let row = gtk::Box::new(gtk::Orientation::Horizontal, 14);
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, px(14));
             row.set_halign(align);
             for module in modules {
                 if let Some(widget) = bar.build(*module, config, hypr.clone()) {
@@ -232,7 +233,7 @@ impl Bar {
                     .filter(|m| compact.contains(m))
                     .collect();
                 let root = section(&wanted, &mut bar, gtk::Align::Center);
-                root.set_spacing(22);
+                root.set_spacing(px(22));
                 root.add_css_class("bar");
                 root.add_css_class("notch");
                 root.add_css_class(position_class);
@@ -261,7 +262,7 @@ impl Bar {
             }
             Module::Title => {
                 hypr.as_ref()?;
-                let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+                let row = gtk::Box::new(gtk::Orientation::Horizontal, px(8));
                 let app = gtk::Label::new(None);
                 app.add_css_class("bar-title");
                 let title = gtk::Label::new(None);
@@ -293,7 +294,7 @@ impl Bar {
             }
             Module::Network => {
                 let image = gtk::Image::new();
-                image.set_pixel_size(16);
+                image.set_pixel_size(px(16));
                 image.add_css_class("module");
                 self.network = Some(image.clone());
                 Some(image.upcast())

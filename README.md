@@ -158,7 +158,14 @@ mkdir -p ~/.config/scuttle
 scuttle config example > ~/.config/scuttle/config.toml
 ```
 
-A few things people change first:
+If everything looks too small or too big on your screen, change `scale`. It resizes the bar, the launcher, text and spacing together, and applies as soon as you save:
+
+```toml
+[appearance]
+scale = 1.5           # 1.0 is the base design size, the default is 1.25
+```
+
+A few other things people change first:
 
 ```toml
 [appearance]
@@ -212,6 +219,10 @@ scripts/headless.sh ctl launcher "fire"
 scripts/headless.sh shot /tmp/launcher.png
 scripts/headless.sh stop
 ```
+
+## Wallpaper
+
+The wallpaper in the screenshots is in the repo at [assets/wallpapers/ferris.png](assets/wallpapers/ferris.png), 3840x2160. It matches the default `ferris` theme.
 
 ## License
 

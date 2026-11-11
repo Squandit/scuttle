@@ -34,7 +34,8 @@ start() {
     chmod 700 "$XDG_RUNTIME_DIR"
     # SCUTTLE_HEADLESS_BG is a colour like #1c1613 or the path of an image.
     local bg="${SCUTTLE_HEADLESS_BG:-#1c1613}"
-    if [ -f "$bg" ]; then bg="$bg fill"; else bg="$bg solid_color"; fi
+    # Sway reads relative paths from its config folder, so make it absolute.
+    if [ -f "$bg" ]; then bg="$(realpath "$bg") fill"; else bg="$bg solid_color"; fi
     cat > "$RUN/sway.conf" <<CONF
 output HEADLESS-1 resolution ${SCUTTLE_HEADLESS_SIZE:-1440x900} scale ${SCUTTLE_HEADLESS_SCALE:-1} bg $bg
 default_border none

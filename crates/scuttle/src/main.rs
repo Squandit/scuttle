@@ -8,6 +8,7 @@ mod bar;
 mod msg;
 mod osd;
 mod overlay;
+mod scale;
 mod services;
 mod shell;
 mod toasts;
@@ -305,6 +306,15 @@ mod tests {
         }
         assert!(HYPRLAND_LUA.contains("hl.exec_cmd(\"scuttle\")"));
         assert!(HYPRLAND_LEGACY.contains("exec-once = scuttle"));
+        // Hyprland's own layer animation must be off, or the launcher
+        // opens as a growing rectangle.
+        assert!(HYPRLAND_LUA.contains("no_anim = true"));
+        assert_eq!(
+            HYPRLAND_LEGACY
+                .matches("layerrule = noanim, scuttle-")
+                .count(),
+            4
+        );
         for snippet in [HYPRLAND_LUA, HYPRLAND_LEGACY] {
             for command in [
                 "scuttle volume up",

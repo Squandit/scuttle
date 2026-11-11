@@ -12,6 +12,11 @@ mode = "dark"
 # Override the theme's accent colour, e.g. accent = "#3355ff".
 # Text colours on top of it are picked automatically to stay readable.
 # accent = "#f74c00"
+# Size of everything Scuttle draws: text, the bar, the launcher and the
+# spacing between things. 1.0 is the base design size. Raise it if things
+# look small on your screen, 0.75 to 2.5. Other pixel sizes in this file
+# (bar height, margin, radius) are base sizes and are multiplied by this.
+scale = 1.25
 # Corner radius of panels in pixels, 0 to 32.
 radius = 18
 # Blur what is behind translucent panels. Needs the Hyprland layer rules

@@ -5,6 +5,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::time::Duration;
 
+use crate::scale::px;
 use gtk::prelude::*;
 use gtk::{gdk, glib, pango};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
@@ -57,10 +58,10 @@ impl Toasts {
         // video is not much of a notification.
         window.set_layer(Layer::Overlay);
         window.set_keyboard_mode(KeyboardMode::None);
-        window.set_default_size(WIDTH, 1);
+        window.set_default_size(px(WIDTH), 1);
 
-        let stack = gtk::Box::new(gtk::Orientation::Vertical, 10);
-        stack.set_width_request(WIDTH);
+        let stack = gtk::Box::new(gtk::Orientation::Vertical, px(10));
+        stack.set_width_request(px(WIDTH));
         window.set_child(Some(&stack));
 
         let toasts = Toasts(Rc::new(Inner {
@@ -98,6 +99,7 @@ impl Toasts {
             .exit_ms
             .set(config.effective_motion(on_battery).exit_ms());
         inner.corner.set(settings.position);
+        inner.stack.set_width_request(px(WIDTH));
 
         let corner = settings.position;
         let window = &inner.window;
@@ -106,7 +108,7 @@ impl Toasts {
         window.set_anchor(Edge::Right, corner.is_right());
         window.set_anchor(Edge::Left, !corner.is_right());
         for edge in [Edge::Top, Edge::Bottom, Edge::Left, Edge::Right] {
-            window.set_margin(edge, 12);
+            window.set_margin(edge, px(12));
         }
         // New toasts slide in from the side of the screen they sit on.
         if corner.is_right() {
@@ -251,17 +253,17 @@ impl Toasts {
         let id = notification.id;
         let weak = Rc::downgrade(&self.0);
 
-        let root = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        let root = gtk::Box::new(gtk::Orientation::Vertical, px(12));
         root.add_css_class("toast");
         if notification.urgency == Urgency::Critical {
             root.add_css_class("critical");
         }
 
-        let top = gtk::Box::new(gtk::Orientation::Horizontal, 14);
+        let top = gtk::Box::new(gtk::Orientation::Horizontal, px(14));
         if let Some(image) = icon_for(&notification.icon) {
             top.append(&image);
         }
-        let text = gtk::Box::new(gtk::Orientation::Vertical, 3);
+        let text = gtk::Box::new(gtk::Orientation::Vertical, px(3));
         text.set_hexpand(true);
         text.set_valign(gtk::Align::Center);
         let summary = gtk::Label::new(Some(&notification.summary));
@@ -290,7 +292,7 @@ impl Toasts {
 
         let buttons: Vec<_> = notification.buttons().cloned().collect();
         if !buttons.is_empty() {
-            let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, px(8));
             row.set_homogeneous(true);
             for (index, action) in buttons.into_iter().take(3).enumerate() {
                 let button = gtk::Button::with_label(&action.label);
@@ -390,7 +392,7 @@ fn icon_for(icon: &str) -> Option<gtk::Image> {
         return None;
     }
     let image = gtk::Image::new();
-    image.set_pixel_size(40);
+    image.set_pixel_size(px(40));
     image.set_valign(gtk::Align::Start);
     image.add_css_class("toast-icon");
     if icon.starts_with('/') {
