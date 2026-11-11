@@ -9,7 +9,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Folders that are never worth indexing.
-const SKIP_DIRS: &[&str] = &["node_modules", "target", "__pycache__", "venv", "vendor", "build", "dist"];
+const SKIP_DIRS: &[&str] = &[
+    "node_modules",
+    "target",
+    "__pycache__",
+    "venv",
+    "vendor",
+    "build",
+    "dist",
+];
 
 /// How deep below each root the index goes.
 const MAX_DEPTH: usize = 6;
@@ -28,7 +36,13 @@ pub struct FileEntry {
 pub fn resolve_roots(roots: &[PathBuf], home: &Path) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = roots
         .iter()
-        .map(|r| if r.is_absolute() { r.clone() } else { home.join(r) })
+        .map(|r| {
+            if r.is_absolute() {
+                r.clone()
+            } else {
+                home.join(r)
+            }
+        })
         .filter(|p| p.is_dir())
         .collect();
     out.dedup();
@@ -43,7 +57,9 @@ pub fn build_index(roots: &[PathBuf], limit: usize) -> Vec<FileEntry> {
     let mut queue: VecDeque<(PathBuf, usize)> = roots.iter().map(|r| (r.clone(), 0)).collect();
 
     while let Some((dir, depth)) = queue.pop_front() {
-        let Ok(read) = fs::read_dir(&dir) else { continue };
+        let Ok(read) = fs::read_dir(&dir) else {
+            continue;
+        };
         let mut children: Vec<_> = read.flatten().collect();
         children.sort_by_key(|e| e.file_name());
         for child in children {
@@ -54,7 +70,9 @@ pub fn build_index(roots: &[PathBuf], limit: usize) -> Vec<FileEntry> {
             if name.starts_with('.') {
                 continue;
             }
-            let Ok(file_type) = child.file_type() else { continue };
+            let Ok(file_type) = child.file_type() else {
+                continue;
+            };
             let is_dir = file_type.is_dir();
             if is_dir && SKIP_DIRS.contains(&name.as_str()) {
                 continue;
@@ -83,7 +101,8 @@ mod tests {
     use super::*;
 
     fn tree(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("scuttle-files-{name}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("scuttle-files-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("Documents/work/deep")).unwrap();
         fs::create_dir_all(root.join("Documents/.secret")).unwrap();
@@ -107,7 +126,14 @@ mod tests {
         let root = tree("skip");
         let index = build_index(&[root.join("Documents")], 1000);
         let found = names(&index);
-        for expected in ["report.pdf", "work", "notes.md", "buried.txt", "project", "main.rs"] {
+        for expected in [
+            "report.pdf",
+            "work",
+            "notes.md",
+            "buried.txt",
+            "project",
+            "main.rs",
+        ] {
             assert!(found.contains(&expected), "missing {expected} in {found:?}");
         }
         for unwanted in [".hidden", ".secret", "key", "node_modules", "index.js"] {
@@ -128,7 +154,8 @@ mod tests {
     #[test]
     fn symlink_cycles_do_not_hang() {
         let root = tree("cycle");
-        std::os::unix::fs::symlink(root.join("Documents"), root.join("Documents/work/loop")).unwrap();
+        std::os::unix::fs::symlink(root.join("Documents"), root.join("Documents/work/loop"))
+            .unwrap();
         let index = build_index(&[root.join("Documents")], 10_000);
         assert!(index.iter().any(|e| e.name == "loop" && !e.is_dir));
         assert!(index.len() < 50);
@@ -138,7 +165,11 @@ mod tests {
     #[test]
     fn roots_resolve_against_home_and_missing_ones_are_dropped() {
         let root = tree("roots");
-        let roots = vec![PathBuf::from("Documents"), PathBuf::from("Nope"), root.join("Documents/work")];
+        let roots = vec![
+            PathBuf::from("Documents"),
+            PathBuf::from("Nope"),
+            root.join("Documents/work"),
+        ];
         assert_eq!(
             resolve_roots(&roots, &root),
             vec![root.join("Documents"), root.join("Documents/work")]
@@ -154,7 +185,10 @@ mod tests {
     #[test]
     fn display_path_uses_tilde() {
         let home = Path::new("/home/me");
-        assert_eq!(display_path(Path::new("/home/me/Documents/a.txt"), home), "~/Documents/a.txt");
+        assert_eq!(
+            display_path(Path::new("/home/me/Documents/a.txt"), home),
+            "~/Documents/a.txt"
+        );
         assert_eq!(display_path(Path::new("/home/me"), home), "~");
         assert_eq!(display_path(Path::new("/etc/hosts"), home), "/etc/hosts");
     }

@@ -2,14 +2,14 @@
 
 use std::path::{Path, PathBuf};
 
-use nucleo_matcher::pattern::{AtomKind, CaseMatching, Normalization, Pattern};
-use nucleo_matcher::{Config as MatcherConfig, Matcher, Utf32Str};
+use nucleo_matcher::{Config as MatcherConfig, Matcher};
 
 use crate::calc;
 use crate::desktop::{exec_command, DesktopEntry};
 use crate::files::{display_path, FileEntry};
 use crate::history::History;
 use crate::item::{Action, Internal, Item, Kind};
+use crate::matching::{Match, Query};
 
 /// Which providers a query is sent to. A prefix character at the start
 /// of the query selects a single mode.
@@ -220,19 +220,26 @@ impl Engine {
         match mode {
             Mode::Calc => self.calc(text).into_iter().collect(),
             Mode::Web => vec![self.web(text)],
-            Mode::System => self.match_system(text, limit),
-            Mode::Windows => self.match_windows(text, limit),
-            Mode::Files => self.match_files(text, limit),
+            Mode::System => settle_alone(self.match_system(text), limit),
+            Mode::Windows => settle_alone(self.match_windows(text), limit),
+            Mode::Files => settle_alone(self.match_files(text), limit),
             Mode::All => {
-                let mut groups = vec![
-                    self.match_apps(text, now, APP_CAP),
-                    self.match_windows(text, WINDOW_CAP),
-                    self.match_system(text, SYSTEM_CAP),
+                let mut candidates = vec![
+                    (self.match_apps(text, now), APP_CAP),
+                    (self.match_windows(text), WINDOW_CAP),
+                    (self.match_system(text), SYSTEM_CAP),
                 ];
                 if text.chars().count() >= 2 {
-                    groups.push(self.match_files(text, FILE_CAP));
+                    candidates.push((self.match_files(text), FILE_CAP));
                 }
-                groups.retain(|g| !g.is_empty());
+                // Loose matches are only worth showing when nothing
+                // anywhere matched properly.
+                let any_strict = candidates.iter().any(|(c, _)| c.iter().any(|s| s.strict));
+                let mut groups: Vec<Vec<Item>> = candidates
+                    .into_iter()
+                    .map(|(c, cap)| settle(c, any_strict, cap))
+                    .filter(|g| !g.is_empty())
+                    .collect();
                 // The group holding the strongest match goes first.
                 groups.sort_by_key(|g| std::cmp::Reverse(g[0].score));
 
@@ -248,15 +255,6 @@ impl Engine {
         }
     }
 
-    fn score(matcher: &mut Matcher, pattern: &Pattern, haystack: &str) -> Option<u32> {
-        let mut buf = Vec::new();
-        pattern.score(Utf32Str::new(haystack, &mut buf), matcher)
-    }
-
-    fn pattern(text: &str) -> Pattern {
-        Pattern::new(text, CaseMatching::Ignore, Normalization::Smart, AtomKind::Fuzzy)
-    }
-
     fn app_item(entry: &DesktopEntry, score: u32) -> Item {
         let subtitle = if !entry.generic_name.is_empty() {
             entry.generic_name.clone()
@@ -268,7 +266,10 @@ impl Engine {
             title: entry.name.clone(),
             subtitle,
             icon: entry.icon.clone(),
-            action: Action::Launch { exec: exec_command(&entry.exec), terminal: entry.terminal },
+            action: Action::Launch {
+                exec: exec_command(&entry.exec),
+                terminal: entry.terminal,
+            },
             confirm: false,
             key: format!("app:{}", entry.id),
             score,
@@ -288,32 +289,49 @@ impl Engine {
         items
     }
 
-    fn match_apps(&mut self, text: &str, now: u64, cap: usize) -> Vec<Item> {
-        let pattern = Self::pattern(text);
+    fn match_apps(&mut self, text: &str, now: u64) -> Vec<Scored> {
+        let query = Query::new(text);
         let lowered = text.to_lowercase();
         let mut items = Vec::new();
         for entry in &self.apps {
-            let by_name = Self::score(&mut self.matcher, &pattern, &entry.name);
-            let extra = format!("{} {} {}", entry.generic_name, entry.keywords.join(" "), entry.id);
-            let by_extra = Self::score(&mut self.matcher, &pattern, &extra).map(|s| s * 6 / 10);
-            let Some(mut score) = by_name.into_iter().chain(by_extra).max() else { continue };
+            let by_name = query.score(&entry.name, &mut self.matcher);
+            let extra = format!(
+                "{} {} {}",
+                entry.generic_name,
+                entry.keywords.join(" "),
+                entry.id
+            );
+            let by_extra = query.score(&extra, &mut self.matcher).map(|m| scaled(m, 6));
+            let Some(best) = better(by_name, by_extra) else {
+                continue;
+            };
+            let mut score = best.score;
             // Typing the start of the name is the strongest signal.
             if entry.name.to_lowercase().starts_with(&lowered) {
                 score += 60;
             }
             score += self.history.boost(&format!("app:{}", entry.id), now);
-            items.push(Self::app_item(entry, score));
+            items.push(Scored {
+                item: Self::app_item(entry, score),
+                strict: best.strict,
+            });
         }
-        finish(items, cap)
+        items
     }
 
     fn window_item(window: &WindowInfo, score: u32) -> Item {
         Item {
             kind: Kind::Window,
             title: window.title.clone(),
-            subtitle: format!("Workspace {}", window.workspace),
+            subtitle: format!(
+                "{}, workspace {}",
+                pretty_class(&window.class),
+                window.workspace
+            ),
             icon: Some(window.class.to_lowercase()),
-            action: Action::FocusWindow { address: window.address.clone() },
+            action: Action::FocusWindow {
+                address: window.address.clone(),
+            },
             confirm: false,
             key: format!("win:{}", window.address),
             score,
@@ -321,19 +339,26 @@ impl Engine {
     }
 
     fn all_windows(&self, limit: usize) -> Vec<Item> {
-        self.windows.iter().take(limit).map(|w| Self::window_item(w, 0)).collect()
+        self.windows
+            .iter()
+            .take(limit)
+            .map(|w| Self::window_item(w, 0))
+            .collect()
     }
 
-    fn match_windows(&mut self, text: &str, cap: usize) -> Vec<Item> {
-        let pattern = Self::pattern(text);
+    fn match_windows(&mut self, text: &str) -> Vec<Scored> {
+        let query = Query::new(text);
         let mut items = Vec::new();
         for window in &self.windows {
             let haystack = format!("{} {}", window.title, window.class);
-            if let Some(score) = Self::score(&mut self.matcher, &pattern, &haystack) {
-                items.push(Self::window_item(window, score * 9 / 10));
+            if let Some(m) = query.score(&haystack, &mut self.matcher) {
+                items.push(Scored {
+                    item: Self::window_item(window, m.score * 9 / 10),
+                    strict: m.strict,
+                });
             }
         }
-        finish(items, cap)
+        items
     }
 
     fn system_item(command: &SystemCommand, score: u32) -> Item {
@@ -350,43 +375,62 @@ impl Engine {
     }
 
     fn all_system(&self, limit: usize) -> Vec<Item> {
-        SYSTEM_COMMANDS.iter().take(limit).map(|c| Self::system_item(c, 0)).collect()
+        SYSTEM_COMMANDS
+            .iter()
+            .take(limit)
+            .map(|c| Self::system_item(c, 0))
+            .collect()
     }
 
-    fn match_system(&mut self, text: &str, cap: usize) -> Vec<Item> {
-        let pattern = Self::pattern(text);
+    fn match_system(&mut self, text: &str) -> Vec<Scored> {
+        let query = Query::new(text);
         let mut items = Vec::new();
         for command in SYSTEM_COMMANDS {
-            let by_title = Self::score(&mut self.matcher, &pattern, command.title);
-            let by_keyword =
-                Self::score(&mut self.matcher, &pattern, command.keywords).map(|s| s * 8 / 10);
-            if let Some(score) = by_title.into_iter().chain(by_keyword).max() {
-                items.push(Self::system_item(command, score * 95 / 100));
+            let by_title = query.score(command.title, &mut self.matcher);
+            let by_keyword = query
+                .score(command.keywords, &mut self.matcher)
+                .map(|m| scaled(m, 8));
+            if let Some(best) = better(by_title, by_keyword) {
+                items.push(Scored {
+                    item: Self::system_item(command, best.score * 95 / 100),
+                    strict: best.strict,
+                });
             }
         }
-        finish(items, cap)
+        items
     }
 
-    fn match_files(&mut self, text: &str, cap: usize) -> Vec<Item> {
-        let pattern = Self::pattern(text);
+    fn match_files(&mut self, text: &str) -> Vec<Scored> {
+        let query = Query::new(text);
         let mut items = Vec::new();
         for file in &self.files {
-            let Some(score) = Self::score(&mut self.path_matcher, &pattern, &file.name) else {
+            let Some(m) = query.score(&file.name, &mut self.path_matcher) else {
                 continue;
             };
             let parent = file.path.parent().unwrap_or(Path::new("/"));
-            items.push(Item {
+            let item = Item {
                 kind: Kind::File,
                 title: file.name.clone(),
                 subtitle: display_path(parent, &self.home),
-                icon: Some(if file.is_dir { "folder-symbolic" } else { "text-x-generic-symbolic" }.into()),
+                icon: Some(
+                    if file.is_dir {
+                        "folder-symbolic"
+                    } else {
+                        "text-x-generic-symbolic"
+                    }
+                    .into(),
+                ),
                 action: Action::OpenPath(file.path.clone()),
                 confirm: false,
                 key: format!("file:{}", file.path.display()),
-                score: score * 8 / 10,
+                score: m.score * 8 / 10,
+            };
+            items.push(Scored {
+                item,
+                strict: m.strict,
             });
         }
-        finish(items, cap)
+        items
     }
 
     fn calc(&self, text: &str) -> Option<Item> {
@@ -430,6 +474,47 @@ impl Engine {
     }
 }
 
+/// A result together with how convincing its match was.
+struct Scored {
+    item: Item,
+    strict: bool,
+}
+
+/// Scales a match found in secondary text (keywords, generic names)
+/// down to `tenths` of its score, so name matches win.
+fn scaled(m: Match, tenths: u32) -> Match {
+    Match {
+        score: m.score * tenths / 10,
+        ..m
+    }
+}
+
+/// The better of two optional matches: strict beats loose, then score.
+fn better(a: Option<Match>, b: Option<Match>) -> Option<Match> {
+    [a, b]
+        .into_iter()
+        .flatten()
+        .max_by_key(|m| (m.strict, m.score))
+}
+
+/// Turns one kind's candidates into its final rows. With `strict_only`
+/// set, loose matches are discarded.
+fn settle(candidates: Vec<Scored>, strict_only: bool, cap: usize) -> Vec<Item> {
+    let items = candidates
+        .into_iter()
+        .filter(|c| c.strict || !strict_only)
+        .map(|c| c.item)
+        .collect();
+    finish(items, cap)
+}
+
+/// [`settle`] for a search of a single kind: loose matches show only
+/// when that kind has no strict ones.
+fn settle_alone(candidates: Vec<Scored>, cap: usize) -> Vec<Item> {
+    let any_strict = candidates.iter().any(|c| c.strict);
+    settle(candidates, any_strict, cap)
+}
+
 /// Sorts a kind's matches, drops weak ones and applies the cap.
 fn finish(mut items: Vec<Item>, cap: usize) -> Vec<Item> {
     items.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.title.cmp(&b.title)));
@@ -468,6 +553,17 @@ fn interleave_fairly(groups: Vec<Vec<Item>>, room: usize) -> Vec<Item> {
         .collect()
 }
 
+/// Turns a window class such as `org.gnome.Nautilus` into a readable
+/// name such as `Nautilus`.
+pub fn pretty_class(class: &str) -> String {
+    let last = class.rsplit('.').next().unwrap_or(class);
+    let mut chars = last.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}
+
 /// Top-level domains common enough that "name.tld" is clearly a site
 /// and not a file name.
 const COMMON_TLDS: &[&str] = &[
@@ -487,7 +583,9 @@ fn as_url(text: &str) -> Option<String> {
     let host = host.split(':').next().unwrap_or(host);
     let (name, tld) = host.rsplit_once('.')?;
     let name_ok = !name.is_empty()
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
         && !name.starts_with('.');
     if name_ok && COMMON_TLDS.contains(&tld.to_ascii_lowercase().as_str()) {
         Some(format!("https://{text}"))
@@ -531,22 +629,59 @@ mod tests {
 
     fn engine() -> Engine {
         let home = Path::new("/home/me");
-        let mut e = Engine::new("https://search.example/?q={query}", 8, home, History::in_memory());
+        let mut e = Engine::new(
+            "https://search.example/?q={query}",
+            8,
+            home,
+            History::in_memory(),
+        );
         e.set_apps(vec![
             app("blender", "Blender", "3D Modeler", &[]),
             app("firefox", "Firefox", "Web Browser", &["internet", "www"]),
-            app("org.gnome.Nautilus", "Files", "File Manager", &["folder", "explorer"]),
+            app(
+                "org.gnome.Nautilus",
+                "Files",
+                "File Manager",
+                &["folder", "explorer"],
+            ),
             app("kitty", "kitty", "Terminal", &["shell", "console"]),
-            app("org.gnome.TextEditor", "Text Editor", "Text Editor", &["notepad"]),
+            app(
+                "org.gnome.TextEditor",
+                "Text Editor",
+                "Text Editor",
+                &["notepad"],
+            ),
         ]);
         e.set_windows(vec![
-            WindowInfo { address: "0xa1".into(), class: "kitty".into(), title: "~/projects/scuttle".into(), workspace: "1".into() },
-            WindowInfo { address: "0xa2".into(), class: "firefox".into(), title: "Hyprland Wiki".into(), workspace: "2".into() },
+            WindowInfo {
+                address: "0xa1".into(),
+                class: "kitty".into(),
+                title: "~/projects/scuttle".into(),
+                workspace: "1".into(),
+            },
+            WindowInfo {
+                address: "0xa2".into(),
+                class: "firefox".into(),
+                title: "Hyprland Wiki".into(),
+                workspace: "2".into(),
+            },
         ]);
         e.set_files(vec![
-            FileEntry { path: "/home/me/Documents/q3-report.pdf".into(), name: "q3-report.pdf".into(), is_dir: false },
-            FileEntry { path: "/home/me/notes/report-draft.md".into(), name: "report-draft.md".into(), is_dir: false },
-            FileEntry { path: "/home/me/Documents/blueprint.pdf".into(), name: "blueprint.pdf".into(), is_dir: false },
+            FileEntry {
+                path: "/home/me/Documents/q3-report.pdf".into(),
+                name: "q3-report.pdf".into(),
+                is_dir: false,
+            },
+            FileEntry {
+                path: "/home/me/notes/report-draft.md".into(),
+                name: "report-draft.md".into(),
+                is_dir: false,
+            },
+            FileEntry {
+                path: "/home/me/Documents/blueprint.pdf".into(),
+                name: "blueprint.pdf".into(),
+                is_dir: false,
+            },
         ]);
         e
     }
@@ -573,7 +708,10 @@ mod tests {
         assert_eq!(items[0].kind, Kind::App);
         assert_eq!(
             items[0].action,
-            Action::Launch { exec: "firefox".into(), terminal: false }
+            Action::Launch {
+                exec: "firefox".into(),
+                terminal: false
+            }
         );
     }
 
@@ -612,7 +750,11 @@ mod tests {
         let mut unique = kinds.clone();
         unique.sort();
         unique.dedup();
-        assert_eq!(kinds.len(), unique.len(), "kinds must be contiguous: {kinds:?}");
+        assert_eq!(
+            kinds.len(),
+            unique.len(),
+            "kinds must be contiguous: {kinds:?}"
+        );
     }
 
     #[test]
@@ -646,8 +788,13 @@ mod tests {
         assert_eq!(titles(&e.search("@kitty", NOW)), vec!["~/projects/scuttle"]);
         assert_eq!(e.search("@", NOW).len(), 2);
         let items = e.search("@wiki", NOW);
-        assert_eq!(items[0].action, Action::FocusWindow { address: "0xa2".into() });
-        assert_eq!(items[0].subtitle, "Workspace 2");
+        assert_eq!(
+            items[0].action,
+            Action::FocusWindow {
+                address: "0xa2".into()
+            }
+        );
+        assert_eq!(items[0].subtitle, "Firefox, workspace 2");
     }
 
     #[test]
@@ -658,7 +805,10 @@ mod tests {
         assert!(items.iter().all(|i| i.kind == Kind::File));
         let q3 = items.iter().find(|i| i.title == "q3-report.pdf").unwrap();
         assert_eq!(q3.subtitle, "~/Documents");
-        assert_eq!(q3.action, Action::OpenPath("/home/me/Documents/q3-report.pdf".into()));
+        assert_eq!(
+            q3.action,
+            Action::OpenPath("/home/me/Documents/q3-report.pdf".into())
+        );
     }
 
     #[test]
@@ -682,7 +832,8 @@ mod tests {
     #[test]
     fn destructive_commands_all_require_confirmation() {
         for command in SYSTEM_COMMANDS {
-            let destructive = ["Log out", "Restart", "Shut down", "Quit Scuttle"].contains(&command.title);
+            let destructive =
+                ["Log out", "Restart", "Shut down", "Quit Scuttle"].contains(&command.title);
             assert_eq!(command.confirm, destructive, "{}", command.title);
         }
     }
@@ -709,12 +860,54 @@ mod tests {
     }
 
     #[test]
+    fn scattered_letter_matches_are_hidden_when_a_real_match_exists() {
+        let mut e = engine();
+        e.set_apps(vec![
+            app("firefox", "Firefox", "Web Browser", &[]),
+            app(
+                "libreoffice-impress",
+                "LibreOffice Impress",
+                "Presentation",
+                &[],
+            ),
+        ]);
+        assert_eq!(
+            titles(&e.search("fire", NOW)),
+            vec!["Firefox", "Hyprland Wiki", "Search the web for \"fire\""]
+        );
+    }
+
+    #[test]
+    fn loose_matches_still_show_when_nothing_better_exists() {
+        let mut e = engine();
+        e.set_windows(Vec::new());
+        e.set_apps(vec![app("firefox", "Firefox", "Web Browser", &[])]);
+        assert_eq!(e.search("frfx", NOW)[0].title, "Firefox");
+    }
+
+    #[test]
     fn recognises_web_addresses() {
-        assert_eq!(as_url("archlinux.org"), Some("https://archlinux.org".into()));
-        assert_eq!(as_url("wiki.hypr.land/Configuring"), Some("https://wiki.hypr.land/Configuring".into()));
+        assert_eq!(
+            as_url("archlinux.org"),
+            Some("https://archlinux.org".into())
+        );
+        assert_eq!(
+            as_url("wiki.hypr.land/Configuring"),
+            Some("https://wiki.hypr.land/Configuring".into())
+        );
         assert_eq!(as_url("https://example.com/a b"), None);
-        assert_eq!(as_url("http://localhost:8080"), Some("http://localhost:8080".into()));
-        for not_url in ["notes.txt", "config.fish", "report.pdf", "hello world.com", ".com", "plain"] {
+        assert_eq!(
+            as_url("http://localhost:8080"),
+            Some("http://localhost:8080".into())
+        );
+        for not_url in [
+            "notes.txt",
+            "config.fish",
+            "report.pdf",
+            "hello world.com",
+            ".com",
+            "plain",
+        ] {
             assert_eq!(as_url(not_url), None, "{not_url}");
         }
         let items = engine().search("archlinux.org", NOW);
@@ -746,7 +939,11 @@ mod tests {
             score,
         };
         let groups = vec![
-            vec![item(Kind::App, "a1", 9), item(Kind::App, "a2", 8), item(Kind::App, "a3", 7)],
+            vec![
+                item(Kind::App, "a1", 9),
+                item(Kind::App, "a2", 8),
+                item(Kind::App, "a3", 7),
+            ],
             vec![item(Kind::File, "f1", 5), item(Kind::File, "f2", 4)],
             vec![item(Kind::System, "s1", 3)],
         ];

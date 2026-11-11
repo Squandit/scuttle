@@ -43,9 +43,14 @@ pub enum Internal {
 pub enum Action {
     /// Start an application. `exec` is a shell command with desktop
     /// entry field codes already removed.
-    Launch { exec: String, terminal: bool },
+    Launch {
+        exec: String,
+        terminal: bool,
+    },
     /// Focus an open window by its compositor address.
-    FocusWindow { address: String },
+    FocusWindow {
+        address: String,
+    },
     /// Open a file or folder with its default application.
     OpenPath(PathBuf),
     /// Open a URL in the default browser.

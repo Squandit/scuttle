@@ -5,27 +5,63 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     /// Focus moved to another workspace.
-    Workspace { id: i32, name: String },
+    Workspace {
+        id: i32,
+        name: String,
+    },
     /// Focus moved to another monitor.
-    FocusedMonitor { monitor: String, workspace: String },
+    FocusedMonitor {
+        monitor: String,
+        workspace: String,
+    },
     /// A different window got focus. Both fields are empty when nothing
     /// is focused.
-    ActiveWindow { class: String, title: String },
-    OpenWindow { address: String, workspace: String, class: String, title: String },
-    CloseWindow { address: String },
+    ActiveWindow {
+        class: String,
+        title: String,
+    },
+    OpenWindow {
+        address: String,
+        workspace: String,
+        class: String,
+        title: String,
+    },
+    CloseWindow {
+        address: String,
+    },
     /// A window moved to another workspace.
-    MoveWindow { address: String, workspace: String },
-    CreateWorkspace { id: i32, name: String },
-    DestroyWorkspace { id: i32, name: String },
+    MoveWindow {
+        address: String,
+        workspace: String,
+    },
+    CreateWorkspace {
+        id: i32,
+        name: String,
+    },
+    DestroyWorkspace {
+        id: i32,
+        name: String,
+    },
     /// A window's title changed.
-    WindowTitle { address: String },
-    Fullscreen { on: bool },
-    MonitorAdded { name: String },
-    MonitorRemoved { name: String },
+    WindowTitle {
+        address: String,
+    },
+    Fullscreen {
+        on: bool,
+    },
+    MonitorAdded {
+        name: String,
+    },
+    MonitorRemoved {
+        name: String,
+    },
     /// The compositor reloaded its config.
     ConfigReloaded,
     /// Anything this crate does not model.
-    Other { name: String, data: String },
+    Other {
+        name: String,
+        data: String,
+    },
 }
 
 impl Event {
@@ -75,21 +111,33 @@ pub fn parse_event(line: &str) -> Option<Event> {
         // the v1 duplicates Hyprland sends alongside.
         "workspacev2" => {
             let f = fields(2);
-            Event::Workspace { id: f.first()?.parse().ok()?, name: f.get(1)?.clone() }
+            Event::Workspace {
+                id: f.first()?.parse().ok()?,
+                name: f.get(1)?.clone(),
+            }
         }
         "createworkspacev2" => {
             let f = fields(2);
-            Event::CreateWorkspace { id: f.first()?.parse().ok()?, name: f.get(1)?.clone() }
+            Event::CreateWorkspace {
+                id: f.first()?.parse().ok()?,
+                name: f.get(1)?.clone(),
+            }
         }
         "destroyworkspacev2" => {
             let f = fields(2);
-            Event::DestroyWorkspace { id: f.first()?.parse().ok()?, name: f.get(1)?.clone() }
+            Event::DestroyWorkspace {
+                id: f.first()?.parse().ok()?,
+                name: f.get(1)?.clone(),
+            }
         }
         "workspace" | "createworkspace" | "destroyworkspace" | "activewindowv2"
         | "focusedmonv2" | "movewindowv2" | "monitoraddedv2" | "monitorremovedv2" => return None,
         "focusedmon" => {
             let f = fields(2);
-            Event::FocusedMonitor { monitor: f.first()?.clone(), workspace: f.get(1)?.clone() }
+            Event::FocusedMonitor {
+                monitor: f.first()?.clone(),
+                workspace: f.get(1)?.clone(),
+            }
         }
         "activewindow" => {
             let f = fields(2);
@@ -110,15 +158,27 @@ pub fn parse_event(line: &str) -> Option<Event> {
         "closewindow" => Event::CloseWindow { address: hex(data) },
         "movewindow" => {
             let f = fields(2);
-            Event::MoveWindow { address: hex(f.first()?), workspace: f.get(1)?.clone() }
+            Event::MoveWindow {
+                address: hex(f.first()?),
+                workspace: f.get(1)?.clone(),
+            }
         }
         "windowtitle" => Event::WindowTitle { address: hex(data) },
         "windowtitlev2" => return None,
-        "fullscreen" => Event::Fullscreen { on: data.trim() == "1" },
-        "monitoradded" => Event::MonitorAdded { name: data.to_string() },
-        "monitorremoved" => Event::MonitorRemoved { name: data.to_string() },
+        "fullscreen" => Event::Fullscreen {
+            on: data.trim() == "1",
+        },
+        "monitoradded" => Event::MonitorAdded {
+            name: data.to_string(),
+        },
+        "monitorremoved" => Event::MonitorRemoved {
+            name: data.to_string(),
+        },
         "configreloaded" => Event::ConfigReloaded,
-        _ => Event::Other { name: name.to_string(), data: data.to_string() },
+        _ => Event::Other {
+            name: name.to_string(),
+            data: data.to_string(),
+        },
     };
     Some(event)
 }
@@ -131,7 +191,10 @@ mod tests {
     fn workspace_change_uses_the_v2_event() {
         assert_eq!(
             parse_event("workspacev2>>3,web\n"),
-            Some(Event::Workspace { id: 3, name: "web".into() })
+            Some(Event::Workspace {
+                id: 3,
+                name: "web".into()
+            })
         );
         assert_eq!(parse_event("workspace>>web\n"), None);
     }
@@ -140,7 +203,10 @@ mod tests {
     fn window_titles_keep_their_commas() {
         assert_eq!(
             parse_event("activewindow>>firefox,Hello, world, again"),
-            Some(Event::ActiveWindow { class: "firefox".into(), title: "Hello, world, again".into() })
+            Some(Event::ActiveWindow {
+                class: "firefox".into(),
+                title: "Hello, world, again".into()
+            })
         );
         assert_eq!(
             parse_event("openwindow>>55d0c0a0,2,kitty,a,b"),
@@ -157,7 +223,10 @@ mod tests {
     fn no_focus_is_two_empty_strings() {
         assert_eq!(
             parse_event("activewindow>>,"),
-            Some(Event::ActiveWindow { class: String::new(), title: String::new() })
+            Some(Event::ActiveWindow {
+                class: String::new(),
+                title: String::new()
+            })
         );
     }
 
@@ -165,7 +234,10 @@ mod tests {
     fn unknown_events_are_kept_not_dropped() {
         assert_eq!(
             parse_event("submap>>resize"),
-            Some(Event::Other { name: "submap".into(), data: "resize".into() })
+            Some(Event::Other {
+                name: "submap".into(),
+                data: "resize".into()
+            })
         );
     }
 

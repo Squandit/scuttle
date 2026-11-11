@@ -32,17 +32,26 @@ impl History {
     /// Loads history from `path`. A missing or unreadable file gives an
     /// empty history that will be saved to the same place.
     pub fn load(path: &Path) -> History {
-        let mut history = History { path: Some(path.to_path_buf()), entries: HashMap::new() };
-        let Ok(text) = fs::read_to_string(path) else { return history };
+        let mut history = History {
+            path: Some(path.to_path_buf()),
+            entries: HashMap::new(),
+        };
+        let Ok(text) = fs::read_to_string(path) else {
+            return history;
+        };
         for line in text.lines() {
             let mut parts = line.splitn(3, '\t');
             let (Some(count), Some(last), Some(key)) = (parts.next(), parts.next(), parts.next())
             else {
                 continue;
             };
-            let (Ok(count), Ok(last_used)) = (count.parse(), last.parse()) else { continue };
+            let (Ok(count), Ok(last_used)) = (count.parse(), last.parse()) else {
+                continue;
+            };
             if !key.is_empty() {
-                history.entries.insert(key.to_string(), Entry { count, last_used });
+                history
+                    .entries
+                    .insert(key.to_string(), Entry { count, last_used });
             }
         }
         history
@@ -50,7 +59,10 @@ impl History {
 
     /// Notes that `key` was just used.
     pub fn record(&mut self, key: &str, now: u64) {
-        let entry = self.entries.entry(key.to_string()).or_insert(Entry { count: 0, last_used: now });
+        let entry = self.entries.entry(key.to_string()).or_insert(Entry {
+            count: 0,
+            last_used: now,
+        });
         entry.count = entry.count.saturating_add(1);
         entry.last_used = now;
     }
@@ -58,7 +70,9 @@ impl History {
     /// A ranking bonus for `key`: frequent and recent use scores higher.
     /// Never-used keys score 0.
     pub fn boost(&self, key: &str, now: u64) -> u32 {
-        let Some(entry) = self.entries.get(key) else { return 0 };
+        let Some(entry) = self.entries.get(key) else {
+            return 0;
+        };
         let age = now.saturating_sub(entry.last_used);
         const HOUR: u64 = 3600;
         const DAY: u64 = 24 * HOUR;
@@ -75,13 +89,17 @@ impl History {
     /// Writes the history to disk, keeping only the most valuable
     /// entries. Does nothing for an in-memory history.
     pub fn save(&self, now: u64) -> io::Result<()> {
-        let Some(path) = &self.path else { return Ok(()) };
+        let Some(path) = &self.path else {
+            return Ok(());
+        };
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
         let mut rows: Vec<(&String, &Entry)> = self.entries.iter().collect();
         rows.sort_by(|a, b| {
-            self.boost(b.0, now).cmp(&self.boost(a.0, now)).then_with(|| a.0.cmp(b.0))
+            self.boost(b.0, now)
+                .cmp(&self.boost(a.0, now))
+                .then_with(|| a.0.cmp(b.0))
         });
         rows.truncate(MAX_ENTRIES);
         let mut text = String::new();
@@ -157,7 +175,10 @@ mod tests {
 
         let loaded = History::load(&path);
         assert_eq!(loaded.len(), 2);
-        assert_eq!(loaded.boost("app:firefox", NOW), h.boost("app:firefox", NOW));
+        assert_eq!(
+            loaded.boost("app:firefox", NOW),
+            h.boost("app:firefox", NOW)
+        );
         assert_eq!(loaded.boost("file:/home/me/a b.txt", NOW), 8);
         fs::remove_dir_all(&dir).unwrap();
     }

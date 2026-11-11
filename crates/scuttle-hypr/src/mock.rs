@@ -14,8 +14,19 @@ use std::thread;
 
 use crate::types::{Client, Workspace, WorkspaceRef};
 
+/// Which ways of writing actions a mock accepts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dialects {
+    Both,
+    /// Behaves like Hyprland 0.55+ with a Lua config.
+    LuaOnly,
+    /// Behaves like older Hyprland.
+    LegacyOnly,
+}
+
 #[derive(Debug)]
 struct State {
+    dialects: Dialects,
     active: i32,
     clients: Vec<Client>,
     subscribers: Vec<UnixStream>,
@@ -53,7 +64,8 @@ impl State {
 
     fn emit(&mut self, line: &str) {
         let payload = format!("{line}\n");
-        self.subscribers.retain_mut(|s| s.write_all(payload.as_bytes()).is_ok());
+        self.subscribers
+            .retain_mut(|s| s.write_all(payload.as_bytes()).is_ok());
     }
 
     fn emit_focus(&mut self) {
@@ -76,7 +88,10 @@ fn window(address: &str, workspace: i32, class: &str, title: &str, order: i32) -
         address: address.into(),
         mapped: true,
         hidden: false,
-        workspace: WorkspaceRef { id: workspace, name: workspace.to_string() },
+        workspace: WorkspaceRef {
+            id: workspace,
+            name: workspace.to_string(),
+        },
         floating: false,
         monitor: 0,
         class: class.into(),
@@ -90,6 +105,12 @@ impl MockHyprland {
     /// Starts a mock with a small, believable desktop: a terminal and a
     /// browser on workspace 1, a browser on 2, a file manager on 3.
     pub fn start(dir: &Path) -> io::Result<MockHyprland> {
+        MockHyprland::start_with(dir, Dialects::Both)
+    }
+
+    /// Like [`MockHyprland::start`], but accepting only the given
+    /// dialects, to imitate a specific Hyprland generation.
+    pub fn start_with(dir: &Path, dialects: Dialects) -> io::Result<MockHyprland> {
         fs::create_dir_all(dir)?;
         let command_path = dir.join(".socket.sock");
         let event_path = dir.join(".socket2.sock");
@@ -99,6 +120,7 @@ impl MockHyprland {
         let events = UnixListener::bind(&event_path)?;
 
         let state = Arc::new(Mutex::new(State {
+            dialects,
             active: 1,
             clients: vec![
                 window("0xa1", 1, "kitty", "~/projects/scuttle", 0),
@@ -127,7 +149,10 @@ impl MockHyprland {
             }
         });
 
-        Ok(MockHyprland { dir: dir.to_path_buf(), state })
+        Ok(MockHyprland {
+            dir: dir.to_path_buf(),
+            state,
+        })
     }
 
     /// The directory holding the sockets, for [`crate::Hyprland::at`].
@@ -178,40 +203,82 @@ fn handle(state: &Arc<Mutex<State>>, request: &str) -> String {
                 r#"[{{"id":0,"name":"MOCK-1","description":"Mock monitor","width":1440,"height":900,"scale":1.0,"focused":true,"activeWorkspace":{{"id":{active},"name":"{active}"}}}}]"#
             )
         }
-        other => {
-            if let Some(target) = other.strip_prefix("dispatch workspace ") {
-                match target.trim().parse::<i32>() {
-                    Ok(id) => {
-                        state.active = id;
-                        state.emit(&format!("workspace>>{id}"));
-                        state.emit(&format!("workspacev2>>{id},{id}"));
-                        state.emit_focus();
-                        "ok".into()
-                    }
-                    Err(_) => "Invalid workspace".into(),
-                }
-            } else if let Some(address) = other.strip_prefix("dispatch focuswindow address:") {
-                let address = address.trim().to_string();
-                match state.clients.iter().position(|c| c.address == address) {
-                    Some(index) => {
-                        for c in state.clients.iter_mut() {
-                            c.focus_history_id += 1;
-                        }
-                        state.clients[index].focus_history_id = 0;
-                        let id = state.clients[index].workspace.id;
-                        if id != state.active {
-                            state.active = id;
-                            state.emit(&format!("workspacev2>>{id},{id}"));
-                        }
-                        state.emit_focus();
-                        "ok".into()
-                    }
-                    None => "Window not found".into(),
-                }
-            } else if other.starts_with("dispatch ") {
+        other => match other.strip_prefix("dispatch ") {
+            Some(action) => dispatch(&mut state, action.trim()),
+            None => "unknown request".into(),
+        },
+    }
+}
+
+/// Pulls the quoted value out of a Lua call such as
+/// `hl.dsp.focus({ workspace = "3" })` given the text before the quote.
+fn lua_value<'a>(action: &'a str, before: &str) -> Option<&'a str> {
+    let rest = action.strip_prefix(before)?;
+    let end = rest.rfind('"')?;
+    Some(&rest[..end])
+}
+
+/// Understands the handful of actions Scuttle sends, in whichever
+/// dialects this mock was started with.
+fn dispatch(state: &mut State, action: &str) -> String {
+    enum Parsed {
+        Workspace(String),
+        FocusWindow(String),
+        Other,
+    }
+    let lua = || -> Option<Parsed> {
+        if let Some(ws) = lua_value(action, "hl.dsp.focus({ workspace = \"") {
+            return Some(Parsed::Workspace(ws.to_string()));
+        }
+        if let Some(window) = lua_value(action, "hl.dsp.focus({ window = \"address:") {
+            return Some(Parsed::FocusWindow(window.to_string()));
+        }
+        (action.starts_with("hl.dsp.exec_cmd(\"") || action == "hl.dsp.exit()")
+            .then_some(Parsed::Other)
+    };
+    let legacy = || -> Option<Parsed> {
+        if let Some(ws) = action.strip_prefix("workspace ") {
+            return Some(Parsed::Workspace(ws.trim().to_string()));
+        }
+        if let Some(window) = action.strip_prefix("focuswindow address:") {
+            return Some(Parsed::FocusWindow(window.trim().to_string()));
+        }
+        (action.starts_with("exec ") || action == "exit").then_some(Parsed::Other)
+    };
+    let parsed = match state.dialects {
+        Dialects::Both => lua().or_else(legacy),
+        Dialects::LuaOnly => lua(),
+        Dialects::LegacyOnly => legacy(),
+    };
+    match parsed {
+        None => "Invalid dispatcher".into(),
+        Some(Parsed::Other) => "ok".into(),
+        Some(Parsed::Workspace(target)) => match target.parse::<i32>() {
+            Ok(id) => {
+                state.active = id;
+                state.emit(&format!("workspace>>{id}"));
+                state.emit(&format!("workspacev2>>{id},{id}"));
+                state.emit_focus();
                 "ok".into()
-            } else {
-                "unknown request".into()
+            }
+            Err(_) => "Invalid workspace".into(),
+        },
+        Some(Parsed::FocusWindow(address)) => {
+            match state.clients.iter().position(|c| c.address == address) {
+                Some(index) => {
+                    for c in state.clients.iter_mut() {
+                        c.focus_history_id += 1;
+                    }
+                    state.clients[index].focus_history_id = 0;
+                    let id = state.clients[index].workspace.id;
+                    if id != state.active {
+                        state.active = id;
+                        state.emit(&format!("workspacev2>>{id},{id}"));
+                    }
+                    state.emit_focus();
+                    "ok".into()
+                }
+                None => "Window not found".into(),
             }
         }
     }
@@ -233,7 +300,7 @@ mod erased {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Event, Hyprland};
+    use crate::{Dispatch, Event, Hyprland};
     use std::time::{Duration, Instant};
 
     fn scratch(name: &str) -> PathBuf {
@@ -243,7 +310,10 @@ mod tests {
     fn wait_for_subscriber(mock: &MockHyprland) {
         let deadline = Instant::now() + Duration::from_secs(2);
         while mock.subscriber_count() == 0 {
-            assert!(Instant::now() < deadline, "event subscriber never connected");
+            assert!(
+                Instant::now() < deadline,
+                "event subscriber never connected"
+            );
             thread::sleep(Duration::from_millis(5));
         }
     }
@@ -254,7 +324,10 @@ mod tests {
         let hypr = Hyprland::at(mock.dir());
 
         let workspaces = hypr.workspaces().unwrap();
-        assert_eq!(workspaces.iter().map(|w| w.id).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(
+            workspaces.iter().map(|w| w.id).collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
         assert_eq!(workspaces[0].windows, 2);
 
         assert_eq!(hypr.active_workspace().unwrap().id, 1);
@@ -270,12 +343,21 @@ mod tests {
         let mut events = hypr.events().unwrap();
         wait_for_subscriber(&mock);
 
-        hypr.dispatch("workspace 3").unwrap();
+        hypr.run(Dispatch::Workspace(3)).unwrap();
         assert_eq!(mock.active_workspace(), 3);
-        assert_eq!(events.next(), Some(Event::Workspace { id: 3, name: "3".into() }));
         assert_eq!(
             events.next(),
-            Some(Event::ActiveWindow { class: "org.gnome.Nautilus".into(), title: "Documents".into() })
+            Some(Event::Workspace {
+                id: 3,
+                name: "3".into()
+            })
+        );
+        assert_eq!(
+            events.next(),
+            Some(Event::ActiveWindow {
+                class: "org.gnome.Nautilus".into(),
+                title: "Documents".into()
+            })
         );
         assert_eq!(hypr.active_window().unwrap().unwrap().title, "Documents");
     }
@@ -284,26 +366,57 @@ mod tests {
     fn empty_workspace_has_no_active_window() {
         let mock = MockHyprland::start(&scratch("empty")).unwrap();
         let hypr = Hyprland::at(mock.dir());
-        hypr.dispatch("workspace 4").unwrap();
+        hypr.run(Dispatch::Workspace(4)).unwrap();
         assert_eq!(hypr.active_window().unwrap(), None);
         // An empty but focused workspace still shows up in the list.
-        assert!(hypr.workspaces().unwrap().iter().any(|w| w.id == 4 && w.windows == 0));
+        assert!(hypr
+            .workspaces()
+            .unwrap()
+            .iter()
+            .any(|w| w.id == 4 && w.windows == 0));
     }
 
     #[test]
     fn focusing_a_window_switches_to_its_workspace() {
         let mock = MockHyprland::start(&scratch("focus")).unwrap();
         let hypr = Hyprland::at(mock.dir());
-        hypr.dispatch("focuswindow address:0xb1").unwrap();
+        hypr.run(Dispatch::FocusWindow("0xb1")).unwrap();
         assert_eq!(mock.active_workspace(), 2);
         assert_eq!(hypr.active_window().unwrap().unwrap().address, "0xb1");
     }
 
     #[test]
-    fn bad_dispatch_is_an_error() {
+    fn unknown_window_is_an_error() {
         let mock = MockHyprland::start(&scratch("bad")).unwrap();
         let hypr = Hyprland::at(mock.dir());
-        assert!(hypr.dispatch("workspace banana").is_err());
+        assert!(hypr.run(Dispatch::FocusWindow("0xdead")).is_err());
+    }
+
+    #[test]
+    fn works_against_new_hyprland_that_only_takes_lua() {
+        let mock = MockHyprland::start_with(&scratch("lua"), Dialects::LuaOnly).unwrap();
+        let hypr = Hyprland::at(mock.dir());
+        hypr.run(Dispatch::Workspace(2)).unwrap();
+        assert_eq!(mock.active_workspace(), 2);
+        hypr.run(Dispatch::Exec("kitty")).unwrap();
+        hypr.run(Dispatch::FocusWindow("0xc1")).unwrap();
+        assert_eq!(mock.active_workspace(), 3);
+    }
+
+    #[test]
+    fn falls_back_for_old_hyprland_and_remembers_it() {
+        let mock = MockHyprland::start_with(&scratch("legacy"), Dialects::LegacyOnly).unwrap();
+        let hypr = Hyprland::at(mock.dir());
+        hypr.run(Dispatch::Workspace(2)).unwrap();
+        assert_eq!(mock.active_workspace(), 2);
+        assert_eq!(
+            hypr.dialect.load(std::sync::atomic::Ordering::Relaxed),
+            crate::Dialect::Legacy as u8
+        );
+        // Clones share what was learned.
+        let clone = hypr.clone();
+        clone.run(Dispatch::Workspace(3)).unwrap();
+        assert_eq!(mock.active_workspace(), 3);
     }
 
     #[test]

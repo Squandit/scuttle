@@ -1,0 +1,71 @@
+# Scuttle configuration.
+#
+# Copy this to ~/.config/scuttle/config.toml and change what you like.
+# Every setting is optional: anything you leave out keeps the value shown
+# here. Scuttle reloads the file as soon as you save it.
+
+[appearance]
+# Built-in themes: "ferris", "tide", "dune", "bone".
+theme = "ferris"
+# "dark" or "light".
+mode = "dark"
+# Override the theme's accent colour, e.g. accent = "#3355ff".
+# Text colours on top of it are picked automatically to stay readable.
+# accent = "#f74c00"
+# Corner radius of panels in pixels, 0 to 32.
+radius = 18
+# Blur what is behind translucent panels. Needs the Hyprland layer rules
+# from the README.
+blur = true
+# How much the shell animates: "off", "subtle" or "full".
+motion = "subtle"
+# Fonts. If one is not installed, a common fallback is used.
+font = "Geist"
+font_display = "Sora"
+font_mono = "Geist Mono"
+
+[bar]
+# "top", "bottom", or "none" for no bar at all. Without a bar, the clock,
+# battery and workspaces show in the corners of the launcher instead.
+position = "top"
+# "strip" is one full-width bar, "islands" is three floating pills,
+# "notch" is a small tab holding workspaces, clock and battery.
+style = "strip"
+# Height in pixels, 24 to 72.
+height = 40
+# Gap between the bar and the screen edge in pixels, 0 to 64.
+margin = 10
+# Which modules go where. Available: "workspaces", "title", "clock",
+# "media", "cpu", "memory", "network", "volume", "battery",
+# "notifications". The battery module only appears on machines that have
+# a battery.
+left = ["workspaces", "title"]
+center = ["clock"]
+right = ["media", "cpu", "memory", "network", "volume", "battery", "notifications"]
+# strftime format. Add %S to show seconds.
+clock_format = "%a %d %b   %H:%M"
+# How many numbered workspaces are always shown, 1 to 20.
+workspaces = 4
+
+[launcher]
+# Where web searches go. {query} is replaced with what you typed.
+web_search = "https://duckduckgo.com/?q={query}"
+# Most results shown at once, 1 to 50.
+max_results = 8
+# Terminal for apps that need one. Empty means: use $TERMINAL, or the
+# first of kitty, foot, ghostty, alacritty, wezterm that is installed.
+terminal = ""
+# Folders searched for files. Relative paths start at your home folder.
+file_roots = ["Documents", "Downloads", "Pictures", "Desktop", "Projects"]
+
+[sound]
+# When interface sounds play: "never", "headphones" or "always".
+feedback = "headphones"
+# Loudness of interface sounds, 0.0 to 1.0.
+volume = 0.25
+
+[power]
+# On a laptop running on battery: turn blur off, and cap motion at
+# "subtle". Neither applies to a desktop PC.
+battery_disables_blur = true
+battery_limits_motion = true

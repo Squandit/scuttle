@@ -203,7 +203,10 @@ pub struct Sound {
 
 impl Default for Sound {
     fn default() -> Self {
-        Self { feedback: SoundWhen::Headphones, volume: 0.25 }
+        Self {
+            feedback: SoundWhen::Headphones,
+            volume: 0.25,
+        }
     }
 }
 
@@ -219,7 +222,10 @@ pub struct Power {
 
 impl Default for Power {
     fn default() -> Self {
-        Self { battery_disables_blur: true, battery_limits_motion: true }
+        Self {
+            battery_disables_blur: true,
+            battery_limits_motion: true,
+        }
     }
 }
 
@@ -282,13 +288,22 @@ impl Config {
             ));
         }
         if a.radius > 32 {
-            return bad(format!("appearance.radius = {} is too large. Use 0 to 32.", a.radius));
+            return bad(format!(
+                "appearance.radius = {} is too large. Use 0 to 32.",
+                a.radius
+            ));
         }
         if !(24..=72).contains(&self.bar.height) {
-            return bad(format!("bar.height = {} is out of range. Use 24 to 72.", self.bar.height));
+            return bad(format!(
+                "bar.height = {} is out of range. Use 24 to 72.",
+                self.bar.height
+            ));
         }
         if self.bar.margin > 64 {
-            return bad(format!("bar.margin = {} is too large. Use 0 to 64.", self.bar.margin));
+            return bad(format!(
+                "bar.margin = {} is too large. Use 0 to 64.",
+                self.bar.margin
+            ));
         }
         if !(1..=20).contains(&self.bar.workspaces) {
             return bad(format!(
@@ -303,7 +318,9 @@ impl Config {
             ));
         }
         if !self.launcher.web_search.contains("{query}") {
-            return bad("launcher.web_search must contain {query} where the search text goes.".into());
+            return bad(
+                "launcher.web_search must contain {query} where the search text goes.".into(),
+            );
         }
         if !(0.0..=1.0).contains(&self.sound.volume) {
             return bad(format!(
@@ -328,7 +345,10 @@ impl Config {
 
     /// Motion after the battery rule is applied.
     pub fn effective_motion(&self, on_battery: bool) -> Motion {
-        match (self.appearance.motion, on_battery && self.power.battery_limits_motion) {
+        match (
+            self.appearance.motion,
+            on_battery && self.power.battery_limits_motion,
+        ) {
             (Motion::Full, true) => Motion::Subtle,
             (motion, _) => motion,
         }
@@ -371,15 +391,21 @@ mod tests {
 
     #[test]
     fn unknown_keys_are_rejected_with_the_key_named() {
-        let err = Config::parse("[appearance]\nraduis = 4\n").unwrap_err().to_string();
+        let err = Config::parse("[appearance]\nraduis = 4\n")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("raduis"), "{err}");
     }
 
     #[test]
     fn out_of_range_values_explain_the_range() {
-        let err = Config::parse("[bar]\nheight = 500\n").unwrap_err().to_string();
+        let err = Config::parse("[bar]\nheight = 500\n")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("24 to 72"), "{err}");
-        let err = Config::parse("[appearance]\ntheme = \"nope\"\n").unwrap_err().to_string();
+        let err = Config::parse("[appearance]\ntheme = \"nope\"\n")
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("ferris"), "{err}");
     }
 

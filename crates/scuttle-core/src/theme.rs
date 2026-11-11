@@ -239,10 +239,19 @@ mod tests {
             assert!(t.text.contrast(t.surface) >= 7.0, "{id}: text on surface");
             assert!(t.text.contrast(t.ground) >= 7.0, "{id}: text on ground");
             assert!(t.text_mid.contrast(t.surface) >= 4.5, "{id}: text_mid");
-            assert!(t.text_dim.contrast(t.surface) >= 4.5, "{id}: text_dim on surface");
-            assert!(t.text_dim.contrast(t.ground) >= 4.5, "{id}: text_dim on ground");
+            assert!(
+                t.text_dim.contrast(t.surface) >= 4.5,
+                "{id}: text_dim on surface"
+            );
+            assert!(
+                t.text_dim.contrast(t.ground) >= 4.5,
+                "{id}: text_dim on ground"
+            );
             assert!(t.on_accent.contrast(t.accent) >= 4.5, "{id}: on_accent");
-            assert!(t.accent_text.contrast(t.surface) >= 4.5, "{id}: accent_text");
+            assert!(
+                t.accent_text.contrast(t.surface) >= 4.5,
+                "{id}: accent_text"
+            );
         }
     }
 

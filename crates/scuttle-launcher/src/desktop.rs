@@ -29,7 +29,10 @@ pub struct DesktopEntry {
 /// `desktops` is the current desktop's names (from
 /// `XDG_CURRENT_DESKTOP`), used for `OnlyShowIn` and `NotShowIn`.
 pub fn parse_entry(id: &str, text: &str, desktops: &[String]) -> Option<DesktopEntry> {
-    let mut entry = DesktopEntry { id: id.to_string(), ..Default::default() };
+    let mut entry = DesktopEntry {
+        id: id.to_string(),
+        ..Default::default()
+    };
     let mut in_main_group = false;
     let mut entry_type = String::new();
     let mut hidden = false;
@@ -50,7 +53,9 @@ pub fn parse_entry(id: &str, text: &str, desktops: &[String]) -> Option<DesktopE
         if !in_main_group {
             continue;
         }
-        let Some((key, value)) = line.split_once('=') else { continue };
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
         let (key, value) = (key.trim(), unescape(value.trim()));
         match key {
             "Type" => entry_type = value,
@@ -68,11 +73,7 @@ pub fn parse_entry(id: &str, text: &str, desktops: &[String]) -> Option<DesktopE
                     hidden = true;
                 }
             }
-            "NotShowIn" => {
-                if list(&value).iter().any(|d| desktops.contains(d)) {
-                    hidden = true;
-                }
-            }
+            "NotShowIn" if list(&value).iter().any(|d| desktops.contains(d)) => hidden = true,
             _ => {}
         }
     }
@@ -84,7 +85,12 @@ pub fn parse_entry(id: &str, text: &str, desktops: &[String]) -> Option<DesktopE
 }
 
 fn list(value: &str) -> Vec<String> {
-    value.split(';').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
+    value
+        .split(';')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 /// Undoes the escapes the spec defines for string values.
@@ -116,16 +122,16 @@ fn unescape(value: &str) -> String {
 /// files or URLs: field codes are dropped and `%%` becomes `%`.
 pub fn exec_command(exec: &str) -> String {
     let mut out = String::with_capacity(exec.len());
-    let mut chars = exec.chars().peekable();
+    let mut chars = exec.chars();
     while let Some(c) = chars.next() {
         if c != '%' {
             out.push(c);
             continue;
         }
-        match chars.next() {
-            Some('%') => out.push('%'),
-            // Any other field code expands to nothing.
-            Some(_) | None => {}
+        // "%%" is a literal percent sign. Any other field code expands
+        // to nothing.
+        if chars.next() == Some('%') {
+            out.push('%');
         }
     }
     // Dropping a code can leave doubled or trailing spaces behind.
@@ -156,13 +162,15 @@ pub fn scan(dirs: &[PathBuf], desktops: &[String]) -> Vec<DesktopEntry> {
             if !seen.insert(id.clone()) {
                 continue;
             }
-            let Ok(text) = fs::read_to_string(&path) else { continue };
+            let Ok(text) = fs::read_to_string(&path) else {
+                continue;
+            };
             if let Some(entry) = parse_entry(&id, &text, desktops) {
                 entries.push(entry);
             }
         }
     }
-    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    entries.sort_by_key(|e| e.name.to_lowercase());
     entries
 }
 
@@ -178,8 +186,13 @@ fn collect(root: &Path, dir: &Path, depth: usize, out: &mut Vec<(String, PathBuf
         if path.is_dir() {
             collect(root, &path, depth + 1, out);
         } else if path.extension().is_some_and(|e| e == "desktop") {
-            let Ok(relative) = path.strip_prefix(root) else { continue };
-            let id = relative.with_extension("").to_string_lossy().replace('/', "-");
+            let Ok(relative) = path.strip_prefix(root) else {
+                continue;
+            };
+            let id = relative
+                .with_extension("")
+                .to_string_lossy()
+                .replace('/', "-");
             out.push((id, path));
         }
     }
@@ -237,7 +250,8 @@ mod tests {
 
     #[test]
     fn localised_names_do_not_replace_the_default() {
-        let text = "[Desktop Entry]\nType=Application\nName=Files\nName[de]=Dateien\nExec=nautilus\n";
+        let text =
+            "[Desktop Entry]\nType=Application\nName=Files\nName[de]=Dateien\nExec=nautilus\n";
         assert_eq!(parse(text).unwrap().name, "Files");
     }
 
@@ -245,7 +259,10 @@ mod tests {
     fn strips_field_codes_from_exec() {
         assert_eq!(exec_command("firefox %u"), "firefox");
         assert_eq!(exec_command("code --new-window %F"), "code --new-window");
-        assert_eq!(exec_command("env A=1 app %i --flag %c"), "env A=1 app --flag");
+        assert_eq!(
+            exec_command("env A=1 app %i --flag %c"),
+            "env A=1 app --flag"
+        );
         assert_eq!(exec_command("printf 100%%"), "printf 100%");
         assert_eq!(exec_command("app %"), "app");
     }
@@ -269,7 +286,11 @@ mod tests {
         fs::write(system.join("shadowed.desktop"), app("System Version")).unwrap();
         fs::write(user.join("shadowed.desktop"), app("User Version")).unwrap();
         fs::write(system.join("gone.desktop"), app("Gone")).unwrap();
-        fs::write(user.join("gone.desktop"), format!("{}Hidden=true\n", app("Gone"))).unwrap();
+        fs::write(
+            user.join("gone.desktop"),
+            format!("{}Hidden=true\n", app("Gone")),
+        )
+        .unwrap();
         fs::write(user.join("sub").join("nested.desktop"), app("Nested")).unwrap();
         fs::write(user.join("notes.txt"), "not a desktop file").unwrap();
 

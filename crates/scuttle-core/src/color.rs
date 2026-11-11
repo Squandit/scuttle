@@ -23,7 +23,10 @@ impl Rgba {
 
     /// The same colour with a different opacity.
     pub fn with_alpha(self, a: f32) -> Self {
-        Self { a: a.clamp(0.0, 1.0), ..self }
+        Self {
+            a: a.clamp(0.0, 1.0),
+            ..self
+        }
     }
 
     /// Linear blend towards `other`. `t = 0` is `self`, `t = 1` is `other`.
@@ -158,7 +161,10 @@ mod tests {
 
     #[test]
     fn parses_all_hex_forms() {
-        assert_eq!("#f74c00".parse::<Rgba>().unwrap(), Rgba::rgb(0xf7, 0x4c, 0x00));
+        assert_eq!(
+            "#f74c00".parse::<Rgba>().unwrap(),
+            Rgba::rgb(0xf7, 0x4c, 0x00)
+        );
         assert_eq!("#fff".parse::<Rgba>().unwrap(), Rgba::rgb(255, 255, 255));
         let half = "#00000080".parse::<Rgba>().unwrap();
         assert!((half.a - 0.502).abs() < 0.01);
@@ -198,6 +204,9 @@ mod tests {
     #[test]
     fn css_output() {
         assert_eq!(Rgba::rgb(1, 2, 3).css(), "#010203");
-        assert_eq!(Rgba::rgb(1, 2, 3).with_alpha(0.5).css(), "rgba(1, 2, 3, 0.500)");
+        assert_eq!(
+            Rgba::rgb(1, 2, 3).with_alpha(0.5).css(),
+            "rgba(1, 2, 3, 0.500)"
+        );
     }
 }

@@ -104,7 +104,10 @@ mod tests {
 
     #[test]
     fn special_workspaces_are_negative() {
-        let w = Workspace { id: -99, ..Default::default() };
+        let w = Workspace {
+            id: -99,
+            ..Default::default()
+        };
         assert!(w.is_special());
     }
 }

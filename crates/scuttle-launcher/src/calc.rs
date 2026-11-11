@@ -269,7 +269,9 @@ pub fn format(value: f64) -> String {
 pub fn looks_like_math(input: &str) -> bool {
     let has_digit = input.chars().any(|c| c.is_ascii_digit());
     let has_operation = input.chars().any(|c| "+-*/^%×÷(".contains(c))
-        || ["sqrt", "sin", "cos", "tan", "ln", "log", "abs"].iter().any(|f| input.contains(f));
+        || ["sqrt", "sin", "cos", "tan", "ln", "log", "abs"]
+            .iter()
+            .any(|f| input.contains(f));
     // A bare number, or text such as "3d-printer", is not a sum.
     let starts_like_a_sum = input
         .trim_start()
@@ -358,17 +360,36 @@ mod tests {
         assert_eq!(evaluate("(2 + 3"), Err(CalcError::Incomplete));
         assert_eq!(evaluate("2 + 3)"), Err(CalcError::Incomplete));
         assert_eq!(evaluate("2 $ 3"), Err(CalcError::Unexpected(2)));
-        assert_eq!(evaluate("foo(2)"), Err(CalcError::UnknownName("foo".into())));
+        assert_eq!(
+            evaluate("foo(2)"),
+            Err(CalcError::UnknownName("foo".into()))
+        );
         assert_eq!(evaluate("sqrt(-1)"), Err(CalcError::NotANumber));
         assert_eq!(evaluate("sqrt 4"), Err(CalcError::Incomplete));
     }
 
     #[test]
     fn recognises_sums_but_not_ordinary_text() {
-        for yes in ["2+2", "12 * (3 + 4)", "sqrt(16)", "-5 + 3", "2^8", "(1+2)*3"] {
+        for yes in [
+            "2+2",
+            "12 * (3 + 4)",
+            "sqrt(16)",
+            "-5 + 3",
+            "2^8",
+            "(1+2)*3",
+        ] {
             assert!(looks_like_math(yes), "{yes} should be a sum");
         }
-        for no in ["firefox", "42", "3d-printer", "wi-fi", "c++", "2 +", "vim 9", "+1 reaction"] {
+        for no in [
+            "firefox",
+            "42",
+            "3d-printer",
+            "wi-fi",
+            "c++",
+            "2 +",
+            "vim 9",
+            "+1 reaction",
+        ] {
             assert!(!looks_like_math(no), "{no} should not be a sum");
         }
     }

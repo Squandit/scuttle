@@ -22,11 +22,19 @@ pub enum Surface {
 pub enum Request {
     /// Check that the shell is alive.
     Ping,
-    Show { surface: Surface },
-    Hide { surface: Surface },
-    Toggle { surface: Surface },
+    Show {
+        surface: Surface,
+    },
+    Hide {
+        surface: Surface,
+    },
+    Toggle {
+        surface: Surface,
+    },
     /// Open the launcher with text already typed, e.g. a mode prefix.
-    Launcher { query: String },
+    Launcher {
+        query: String,
+    },
     /// Re-read the config file and restyle everything.
     Reload,
     /// Stop the shell.
@@ -77,10 +85,18 @@ mod tests {
     fn requests_round_trip() {
         let all = [
             Request::Ping,
-            Request::Show { surface: Surface::Launcher },
-            Request::Hide { surface: Surface::Bar },
-            Request::Toggle { surface: Surface::Launcher },
-            Request::Launcher { query: "= 2+2".into() },
+            Request::Show {
+                surface: Surface::Launcher,
+            },
+            Request::Hide {
+                surface: Surface::Bar,
+            },
+            Request::Toggle {
+                surface: Surface::Launcher,
+            },
+            Request::Launcher {
+                query: "= 2+2".into(),
+            },
             Request::Reload,
             Request::Quit,
         ];
@@ -92,7 +108,10 @@ mod tests {
 
     #[test]
     fn wire_format_is_stable() {
-        let line = serde_json::to_string(&Request::Toggle { surface: Surface::Launcher }).unwrap();
+        let line = serde_json::to_string(&Request::Toggle {
+            surface: Surface::Launcher,
+        })
+        .unwrap();
         assert_eq!(line, r#"{"cmd":"toggle","surface":"launcher"}"#);
         assert_eq!(encode_response(&Response::Ok), "{\"status\":\"ok\"}\n");
     }
@@ -119,11 +138,21 @@ mod tests {
             assert_eq!(decode_request(&line).unwrap(), Request::Ping);
             let mut stream = stream;
             stream
-                .write_all(encode_response(&Response::Pong { version: "t".into() }).as_bytes())
+                .write_all(
+                    encode_response(&Response::Pong {
+                        version: "t".into(),
+                    })
+                    .as_bytes(),
+                )
                 .unwrap();
         });
         let reply = send(&path, &Request::Ping).unwrap();
-        assert_eq!(reply, Response::Pong { version: "t".into() });
+        assert_eq!(
+            reply,
+            Response::Pong {
+                version: "t".into()
+            }
+        );
         server.join().unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
     }

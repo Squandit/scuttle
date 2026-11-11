@@ -1,0 +1,22 @@
+[package]
+name = "scuttle"
+description = "A desktop shell for Hyprland: bar, launcher and more in one process"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "scuttle"
+path = "src/main.rs"
+
+[dependencies]
+scuttle-core.workspace = true
+scuttle-hypr.workspace = true
+scuttle-launcher.workspace = true
+scuttle-sys.workspace = true
+gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
+gtk4-layer-shell = "0.8"
+async-channel = "2"
+clap = { version = "4", features = ["derive"] }

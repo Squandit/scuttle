@@ -27,8 +27,14 @@ pub fn stylesheet(theme: &Theme, config: &Config, on_battery: bool) -> String {
     };
 
     let tokens: Vec<(&str, String)> = vec![
-        ("font_display", font_stack(&config.appearance.font_display, "sans-serif")),
-        ("font_mono", font_stack(&config.appearance.font_mono, "monospace")),
+        (
+            "font_display",
+            font_stack(&config.appearance.font_display, "sans-serif"),
+        ),
+        (
+            "font_mono",
+            font_stack(&config.appearance.font_mono, "monospace"),
+        ),
         ("font", font_stack(&config.appearance.font, "sans-serif")),
         ("ground", theme.ground.css()),
         ("surface", theme.surface.css()),
@@ -52,10 +58,25 @@ pub fn stylesheet(theme: &Theme, config: &Config, on_battery: bool) -> String {
         ("radius_xs", format!("{}px", (radius / 2).max(2))),
         ("radius", format!("{radius}px")),
         ("bar_height", format!("{}px", config.bar.height)),
-        ("cell", format!("{}px", config.bar.height.saturating_sub(10))),
+        (
+            "cell",
+            format!("{}px", config.bar.height.saturating_sub(10)),
+        ),
         ("dur", format!("{}ms", motion.duration_ms())),
         ("exit", format!("{}ms", motion.exit_ms())),
         ("travel", format!("{}px", motion.travel_px())),
+        (
+            "stagger_rules",
+            (1..=7)
+                .map(|i| {
+                    format!(
+                        ".results > row.d{i} {{ animation-delay: {}ms; }}",
+                        motion.stagger_ms() * i
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        ),
         ("ease", motion.css_ease()),
     ];
     fill(TEMPLATE, tokens)
@@ -102,7 +123,22 @@ window.scuttle {
   font-size: 13px;
 }
 
-window.scuttle label { color: inherit; }
+/* Neutralise whatever GTK theme is installed so every surface looks the
+   same on every machine. */
+.scuttle button {
+  background: none;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font-weight: inherit;
+}
+
+.scuttle list, .scuttle row { background: none; outline: none; color: inherit; }
 
 /* ---- Bar ------------------------------------------------------------ */
 
@@ -123,7 +159,7 @@ window.scuttle label { color: inherit; }
 
 .bar.notch.bottom { border-radius: $radius_lg $radius_lg 0 0; }
 
-.ws {
+.scuttle .ws {
   min-width: $cell;
   min-height: $cell;
   padding: 0;
@@ -134,9 +170,9 @@ window.scuttle label { color: inherit; }
   transition: background-color $dur $ease, color $dur $ease;
 }
 
-.ws.occupied { background-color: $wash; color: $text; }
-.ws:hover { background-color: $wash_strong; color: $text; }
-.ws.active, .ws.active:hover { background-color: $accent; color: $on_accent; }
+.scuttle .ws.occupied { background-color: $wash; color: $text; }
+.scuttle .ws:hover { background-color: $wash_strong; color: $text; }
+.scuttle .ws.active, .scuttle .ws.active:hover { background-color: $accent; color: $on_accent; }
 
 .bar-title { color: $text_mid; margin-left: 12px; }
 .bar-subtitle { color: $text_dim; }
@@ -189,14 +225,19 @@ window.scuttle label { color: inherit; }
   caret-color: $accent;
   background: none;
   border: none;
-  border-bottom: 2px solid $accent;
   border-radius: 0;
   box-shadow: none;
   outline: none;
-  min-height: 88px;
+  min-height: 78px;
+  padding: 0;
+}
+
+.search-row {
+  border-bottom: 2px solid $accent;
   padding: 0 4px 10px 4px;
 }
 
+.query:focus-within { outline: none; box-shadow: none; }
 .query placeholder { color: $text_dim; }
 .query selection { background-color: $accent; color: $on_accent; }
 
@@ -211,6 +252,14 @@ window.scuttle label { color: inherit; }
   color: $text;
   transition: background-color $exit $ease;
 }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY($travel); }
+  to { opacity: 1; transform: none; }
+}
+
+.results > row.enter { animation: rise $dur $ease both; }
+$stagger_rules
 
 .results > row:hover { background-color: $wash; }
 .results > row:selected { background-color: $accent; color: $on_accent; }
@@ -241,6 +290,17 @@ window.scuttle label { color: inherit; }
 .detail-sub { font-size: 13px; color: $text_dim; }
 .detail-key { font-family: $font_mono; font-size: 12px; color: $text_dim; }
 
+.detail-action { font-size: 14px; color: $text; }
+
+.mode-chip {
+  background-color: $accent;
+  color: $on_accent;
+  border-radius: $radius_xs;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .hint { font-size: 12px; color: $text_dim; }
 .hint.mono { font-family: $font_mono; }
 .confirm { font-size: 13px; color: $accent_text; }
@@ -259,7 +319,7 @@ window.scuttle label { color: inherit; }
   box-shadow: 0 20px 50px $shadow;
 }
 
-button.primary {
+.scuttle button.primary {
   background: none;
   background-color: $accent;
   color: $on_accent;
@@ -271,7 +331,7 @@ button.primary {
   font-weight: 600;
 }
 
-button.quiet {
+.scuttle button.quiet {
   background: none;
   color: $text;
   border: 1px solid $line_strong;
@@ -281,7 +341,7 @@ button.quiet {
   padding: 0 16px;
 }
 
-button.quiet:hover { background-color: $wash; }
+.scuttle button.quiet:hover { background-color: $wash; }
 "#;
 
 #[cfg(test)]
@@ -350,7 +410,10 @@ mod tests {
 
     #[test]
     fn longer_tokens_win_over_their_prefixes() {
-        let out = fill("$text_dim $text", vec![("text", "A".into()), ("text_dim", "B".into())]);
+        let out = fill(
+            "$text_dim $text",
+            vec![("text", "A".into()), ("text_dim", "B".into())],
+        );
         assert_eq!(out, "B A");
     }
 }

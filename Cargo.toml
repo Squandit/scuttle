@@ -4,6 +4,8 @@ members = [
     "crates/scuttle-core",
     "crates/scuttle-hypr",
     "crates/scuttle-launcher",
+    "crates/scuttle-sys",
+    "crates/scuttle",
 ]
 
 [workspace.package]
@@ -20,6 +22,7 @@ toml = "1"
 scuttle-core = { path = "crates/scuttle-core" }
 scuttle-hypr = { path = "crates/scuttle-hypr" }
 scuttle-launcher = { path = "crates/scuttle-launcher" }
+scuttle-sys = { path = "crates/scuttle-sys" }
 
 [profile.release]
 opt-level = 3
