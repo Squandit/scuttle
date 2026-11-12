@@ -141,7 +141,7 @@ Start your search with one of these characters to search a single kind of thing:
 | --- | --- | --- |
 | `>` | System actions | `> lock` |
 | `/` | Files | `/report` |
-| `?` | The web | `? rust gtk4` |
+| `?` | The web, or the assistant | `? rust gtk4` |
 | `=` | Calculator | `= 12 * (3 + 4)` |
 | `@` | Open windows | `@wiki` |
 | `;` | Clipboard history | `;token` |
@@ -149,11 +149,13 @@ Start your search with one of these characters to search a single kind of thing:
 
 Clipboard history comes from [cliphist](https://github.com/sentriz/cliphist), which dusky and most Hyprland setups already run. Enter puts the chosen entry back on the clipboard. Scuttle keeps no copy of its own. The emoji picker knows all 1,900 emoji by name and learns which ones you use.
 
+Type a question, such as `why is my fan loud`, and the last result offers to ask the assistant. Choosing it opens the panel with the question already sent. After `?` the offer is always there, under the web search.
+
 You do not need the `=` for a sum. Type `12 * (3 + 4)` and the answer appears first; Enter copies it. Type a web address like `archlinux.org` and Enter opens it.
 
 ## The assistant
 
-Open it with Super + /, or `scuttle toggle assistant`. Type a question and press Enter. Shift+Enter starts a new line, and Esc closes the panel. `scuttle ask why is my fan loud` opens it and sends the message in one go, which is handy from a terminal or a keybind.
+Open it with Super + /, or `scuttle toggle assistant`, or type a question into the launcher. Type a question and press Enter. Shift+Enter starts a new line, and Esc closes the panel. `scuttle ask why is my fan loud` opens it and sends the message in one go, which is handy from a terminal or a keybind.
 
 **How it reaches Claude.** There are two ways, and Scuttle uses whichever you have set up.
 

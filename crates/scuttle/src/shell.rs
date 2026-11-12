@@ -242,6 +242,15 @@ impl Shell {
         shell.watch_palette();
 
         if let Some(panel) = &shell.assistant {
+            // A question typed into the launcher goes to the panel.
+            shell.overlay.on_ask({
+                let panel = panel.clone();
+                move |question| {
+                    if let Err(problem) = panel.ask(question) {
+                        eprintln!("{problem}");
+                    }
+                }
+            });
             // The assistant changes the desktop the same way the
             // `scuttle` command does, and can do nothing the command
             // cannot.

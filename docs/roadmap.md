@@ -23,7 +23,7 @@ What is planned and not built yet, roughly in order. The README lists what works
 The panel itself is built: both backends, the switch between them, desktop actions, and terminal commands with approval. Still to come:
 
 - **See the screen.** Send a screen region or the focused window along with a question.
-- **Answers in the launcher.** Short questions answered inline, without opening the panel.
+- **Answers in the launcher.** A question typed into the launcher can already be handed to the panel. Next: short answers shown in the launcher itself.
 - **Read aloud.** An optional button to speak an answer, using Fish Audio. Off until a key is set, and the key goes in the keyring like the Claude one.
 - **Context.** Tell Claude which window is focused and what is playing, when the user asks about "this".
 - **Keeping conversations** between restarts, as an option.

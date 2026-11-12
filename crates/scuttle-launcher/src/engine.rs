@@ -167,6 +167,25 @@ const SYSTEM_COMMANDS: &[SystemCommand] = &[
     },
 ];
 
+/// Whether `text` reads as something to ask, not something to find:
+/// it ends in a question mark, or it is a few words starting with one
+/// of the words questions start with.
+pub fn looks_like_a_question(text: &str) -> bool {
+    const OPENERS: &[&str] = &[
+        "how", "why", "what", "when", "where", "who", "which", "can", "could", "should", "is",
+        "are", "do", "does", "explain", "tell",
+    ];
+    let text = text.trim();
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() >= 2 && text.ends_with('?') {
+        return true;
+    }
+    words.len() >= 3
+        && words
+            .first()
+            .is_some_and(|first| OPENERS.contains(&first.to_lowercase().as_str()))
+}
+
 /// How many results each kind may contribute when searching everything.
 const APP_CAP: usize = 5;
 const WINDOW_CAP: usize = 4;
@@ -186,6 +205,8 @@ pub struct Engine {
     history: History,
     web_template: String,
     max_results: usize,
+    /// Whether there is an assistant to hand questions to.
+    assistant: bool,
     home: PathBuf,
     matcher: Matcher,
     path_matcher: Matcher,
@@ -201,6 +222,7 @@ impl Engine {
             history,
             web_template: web_template.to_string(),
             max_results: max_results.max(1),
+            assistant: false,
             home: home.to_path_buf(),
             matcher: Matcher::new(MatcherConfig::DEFAULT),
             path_matcher: Matcher::new(MatcherConfig::DEFAULT.match_paths()),
@@ -227,6 +249,12 @@ impl Engine {
     pub fn set_options(&mut self, web_template: &str, max_results: usize) {
         self.web_template = web_template.to_string();
         self.max_results = max_results.max(1);
+    }
+
+    /// Says whether questions can be handed to the assistant. Off
+    /// until this is called.
+    pub fn set_assistant(&mut self, available: bool) {
+        self.assistant = available;
     }
 
     /// Notes that a result was chosen, so it ranks higher next time.
@@ -264,7 +292,11 @@ impl Engine {
 
         match mode {
             Mode::Calc => self.calc(text).into_iter().collect(),
-            Mode::Web => vec![self.web(text)],
+            Mode::Web => {
+                let mut out = vec![self.web(text)];
+                out.extend(self.ask(text));
+                out
+            }
             Mode::System => settle_alone(self.match_system(text), limit),
             Mode::Windows => settle_alone(self.match_windows(text), limit),
             Mode::Files => settle_alone(self.match_files(text), limit),
@@ -295,8 +327,12 @@ impl Engine {
                     out.extend(self.calc(text));
                 }
                 let room = limit.saturating_sub(out.len() + 1);
+                // A question gets the assistant as well as the web.
+                let ask = self.ask(text).filter(|_| looks_like_a_question(text));
+                let room = room.saturating_sub(ask.iter().count());
                 out.extend(interleave_fairly(groups, room));
                 out.push(self.web(text));
+                out.extend(ask);
                 out
             }
         }
@@ -589,6 +625,24 @@ impl Engine {
             confirm: false,
             key: "calc".into(),
             score: u32::MAX,
+        })
+    }
+
+    /// The row that hands `text` to the assistant, when there is one
+    /// and the text is something to ask rather than an address.
+    fn ask(&self, text: &str) -> Option<Item> {
+        if !self.assistant || as_url(text).is_some() {
+            return None;
+        }
+        Some(Item {
+            kind: Kind::Ask,
+            title: format!("Ask the assistant \"{text}\""),
+            subtitle: String::new(),
+            icon: Some("dialog-question-symbolic".into()),
+            action: Action::Ask(text.to_string()),
+            confirm: false,
+            key: "ask".into(),
+            score: 0,
         })
     }
 
@@ -886,6 +940,74 @@ mod tests {
         );
         let items = engine().search("fire", NOW);
         assert_eq!(items.last().unwrap().kind, Kind::Web);
+    }
+
+    #[test]
+    fn questions_are_told_apart_from_searches() {
+        for question in [
+            "why is my fan loud",
+            "how do I rebase",
+            "What time is it in Tokyo",
+            "rust lifetimes?",
+            "is this normal?",
+        ] {
+            assert!(looks_like_a_question(question), "{question}");
+        }
+        for search in [
+            "fire",
+            "firefox",
+            "why",
+            "how to",
+            "visual studio code",
+            "?",
+            "what?",
+        ] {
+            assert!(!looks_like_a_question(search), "{search}");
+        }
+    }
+
+    #[test]
+    fn a_question_offers_the_assistant_after_the_web() {
+        let mut e = engine();
+        // With no assistant there is nothing to offer.
+        let items = e.search("why is my fan loud", NOW);
+        assert!(items.iter().all(|item| item.kind != Kind::Ask));
+
+        e.set_assistant(true);
+        let items = e.search("why is my fan loud", NOW);
+        let kinds: Vec<Kind> = items.iter().rev().take(2).map(|item| item.kind).collect();
+        assert_eq!(kinds, [Kind::Ask, Kind::Web]);
+        assert_eq!(
+            items.last().unwrap().action,
+            Action::Ask("why is my fan loud".into())
+        );
+        // An ordinary search is left alone.
+        let items = e.search("fire", NOW);
+        assert_eq!(items.last().unwrap().kind, Kind::Web);
+        assert!(items.iter().all(|item| item.kind != Kind::Ask));
+    }
+
+    #[test]
+    fn the_question_mark_mode_always_offers_the_assistant() {
+        let mut e = engine();
+        e.set_assistant(true);
+        let items = e.search("? rust", NOW);
+        let kinds: Vec<Kind> = items.iter().map(|item| item.kind).collect();
+        assert_eq!(kinds, [Kind::Web, Kind::Ask]);
+        // An address is something to open, not to ask about.
+        let items = e.search("? archlinux.org", NOW);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].kind, Kind::Web);
+    }
+
+    #[test]
+    fn the_assistant_row_never_pushes_results_past_the_limit() {
+        let mut e = engine();
+        e.set_assistant(true);
+        e.set_options("https://search.example/?q={query}", 3);
+        let items = e.search("what is fire", NOW);
+        assert!(items.len() <= 3, "{} results", items.len());
+        assert_eq!(items.last().unwrap().kind, Kind::Ask);
     }
 
     #[test]

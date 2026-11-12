@@ -13,6 +13,8 @@ pub enum Kind {
     Clipboard,
     Emoji,
     Web,
+    /// A question handed to the assistant.
+    Ask,
 }
 
 impl Kind {
@@ -27,6 +29,7 @@ impl Kind {
             Kind::Clipboard => "Clipboard",
             Kind::Emoji => "Emoji",
             Kind::Web => "Web",
+            Kind::Ask => "Assistant",
         }
     }
 }
@@ -72,6 +75,8 @@ pub enum Action {
     RestoreClip(String),
     /// Run a shell command.
     Shell(String),
+    /// Open the assistant panel and send it this.
+    Ask(String),
     Internal(Internal),
 }
 

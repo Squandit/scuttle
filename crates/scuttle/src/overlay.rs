@@ -52,6 +52,7 @@ pub fn describe(action: &Action) -> (&'static str, String) {
         Action::Copy(text) => ("Copy to the clipboard", text.clone()),
         Action::RestoreClip(_) => ("Copy back to the clipboard", String::new()),
         Action::Shell(command) => ("Run", command.clone()),
+        Action::Ask(question) => ("Ask the assistant", question.clone()),
         Action::Internal(Internal::Reload) => ("Re-read config.toml", String::new()),
         Action::Internal(Internal::Quit) => ("Stop Scuttle", String::new()),
         Action::Internal(Internal::Logout) => ("End this session", String::new()),
@@ -106,7 +107,11 @@ struct Inner {
     feedback: Rc<Feedback>,
     focused_monitor: RefCell<Option<String>>,
     on_internal: RefCell<Option<InternalHandler>>,
+    on_ask: RefCell<Option<AskHandler>>,
 }
+
+/// Called with a question for the assistant.
+type AskHandler = Box<dyn Fn(&str)>;
 
 /// Called for results that act on the shell itself.
 type InternalHandler = Box<dyn Fn(Internal)>;
@@ -223,7 +228,7 @@ impl Overlay {
         let footer = gtk::Box::new(gtk::Orientation::Horizontal, px(16));
         footer.set_margin_top(px(22));
         let prefixes = gtk::Label::new(Some(
-            "> system   / files   ? web   = calc   @ windows   ; clipboard   : emoji",
+            "> system   / files   ? web or ask   = calc   @ windows   ; clipboard   : emoji",
         ));
         prefixes.add_css_class("hint");
         prefixes.add_css_class("mono");
@@ -311,6 +316,7 @@ impl Overlay {
             focused_monitor: RefCell::new(None),
             feedback,
             on_internal: RefCell::new(None),
+            on_ask: RefCell::new(None),
         });
         let overlay = Overlay(inner);
         overlay.apply_config(config, false);
@@ -415,6 +421,13 @@ impl Overlay {
     /// Registers what happens for results that act on the shell itself.
     pub fn on_internal(&self, callback: impl Fn(Internal) + 'static) {
         *self.0.on_internal.borrow_mut() = Some(Box::new(callback));
+    }
+
+    /// Registers what hands a question to the assistant, and so turns
+    /// on the launcher's "Ask the assistant" results.
+    pub fn on_ask(&self, callback: impl Fn(&str) + 'static) {
+        *self.0.on_ask.borrow_mut() = Some(Box::new(callback));
+        self.0.engine.borrow_mut().set_assistant(true);
     }
 
     /// Applies config values that affect the overlay.
@@ -883,6 +896,12 @@ impl Overlay {
             }
             Action::RestoreClip(line) => actions::restore_clip(line),
             Action::Shell(command) => actions::spawn_detached(command, hypr),
+            Action::Ask(question) => {
+                if let Some(callback) = inner.on_ask.borrow().as_ref() {
+                    callback(question);
+                }
+                Ok(())
+            }
             Action::Internal(which) => {
                 if *which == Internal::Logout {
                     return actions::logout(hypr);
