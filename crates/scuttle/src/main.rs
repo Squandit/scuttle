@@ -40,6 +40,11 @@ struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     config: Option<PathBuf>,
 
+    /// Run only the launcher: no bar, notifications, tray or assistant.
+    /// For using Scuttle's launcher beside another bar such as Waybar.
+    #[arg(long, global = true)]
+    launcher_only: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -264,7 +269,7 @@ pub fn request_from_args(args: &[String]) -> Result<Request, String> {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let config_path = cli.config.unwrap_or_else(paths::config_file);
+    let config_path = cli.config.clone().unwrap_or_else(paths::config_file);
 
     let request = match ipc_request(cli.command.unwrap_or(Command::Run)) {
         Ok(request) => request,
@@ -282,7 +287,7 @@ fn main() -> ExitCode {
             );
             return ExitCode::SUCCESS;
         }
-        Err(_) => return run(config_path),
+        Err(_) => return run(config_path, cli.launcher_only),
     };
 
     match ipc::send(&paths::socket_path(), &request) {
@@ -519,7 +524,7 @@ fn config_command(action: ConfigAction, path: PathBuf) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn run(config_path: PathBuf) -> ExitCode {
+fn run(config_path: PathBuf, launcher_only: bool) -> ExitCode {
     // Scuttle does its own single-instance check over its socket, which
     // also works when there is no D-Bus session.
     let app = gtk::Application::builder()
@@ -537,7 +542,7 @@ fn run(config_path: PathBuf) -> ExitCode {
             if shell_slot.borrow().is_some() {
                 return;
             }
-            match shell::Shell::start(app, &config_path) {
+            match shell::Shell::start(app, &config_path, launcher_only) {
                 Ok(shell) => {
                     // The shell has no ordinary window, so hold the
                     // application open explicitly.

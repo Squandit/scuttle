@@ -107,6 +107,29 @@ scripts/install-on-dusky.sh uninstall
 
 That removes the Hyprland file and the `require` line, restores the Waybar line, turns mako back on and starts Waybar again. Originals are also backed up in `~/.local/state/scuttle/dusky/backup`.
 
+## Just the launcher
+
+You can use Scuttle's launcher without the rest: keep your own bar, notification daemon and everything else, and have the launcher on a key in place of rofi or wofi.
+
+On dusky, one command sets that up, and puts Waybar and mako back if a full install had turned them off:
+
+```sh
+scripts/install-on-dusky.sh --launcher-only
+```
+
+Anywhere else, start Scuttle with `--launcher-only` and bind a key to it. In a Lua Hyprland config:
+
+```lua
+hl.on("hyprland.start", function()
+    hl.exec_cmd("scuttle --launcher-only")
+end)
+hl.bind("Super_L", hl.dsp.exec_cmd("scuttle toggle launcher"), { release = true })
+```
+
+In this mode Scuttle draws no bar, leaves notifications to whatever you already run, and has no tray or assistant, whatever the config file says. The launcher keeps all of its modes, its themes and `scuttle settings`. It stays running in the background so it opens at once; it uses no CPU while closed.
+
+Scripts that use rofi as a menu (dusky's Wi-Fi and power menus, for example) are not affected and keep using rofi.
+
 ## Set up Hyprland
 
 This section is for setups other than dusky.
@@ -189,6 +212,7 @@ To turn the assistant off, set `enabled = false` under `[assistant]`.
 Running `scuttle` with no arguments starts the shell. Every other command talks to the shell that is already running.
 
 ```sh
+scuttle --launcher-only     # start with only the launcher, beside another bar
 scuttle toggle launcher     # open or close the launcher
 scuttle launcher "> "       # open the launcher with text already typed
 scuttle launcher ";"        # open clipboard history

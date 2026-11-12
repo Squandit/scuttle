@@ -108,6 +108,11 @@ struct Inner {
     focused_monitor: RefCell<Option<String>>,
     on_internal: RefCell<Option<InternalHandler>>,
     on_ask: RefCell<Option<AskHandler>>,
+    /// The line at the bottom that lists the search prefixes.
+    prefixes: gtk::Label,
+    /// Whether the clock and status may show in the corners when
+    /// there is no bar.
+    glance_allowed: Cell<bool>,
 }
 
 /// Called with a question for the assistant.
@@ -228,7 +233,7 @@ impl Overlay {
         let footer = gtk::Box::new(gtk::Orientation::Horizontal, px(16));
         footer.set_margin_top(px(22));
         let prefixes = gtk::Label::new(Some(
-            "> system   / files   ? web or ask   = calc   @ windows   ; clipboard   : emoji",
+            "> system   / files   ? web   = calc   @ windows   ; clipboard   : emoji",
         ));
         prefixes.add_css_class("hint");
         prefixes.add_css_class("mono");
@@ -317,6 +322,8 @@ impl Overlay {
             feedback,
             on_internal: RefCell::new(None),
             on_ask: RefCell::new(None),
+            prefixes: prefixes.clone(),
+            glance_allowed: Cell::new(true),
         });
         let overlay = Overlay(inner);
         overlay.apply_config(config, false);
@@ -428,6 +435,16 @@ impl Overlay {
     pub fn on_ask(&self, callback: impl Fn(&str) + 'static) {
         *self.0.on_ask.borrow_mut() = Some(Box::new(callback));
         self.0.engine.borrow_mut().set_assistant(true);
+        self.0.prefixes.set_text(
+            "> system   / files   ? web or ask   = calc   @ windows   ; clipboard   : emoji",
+        );
+    }
+
+    /// Says whether the launcher may show the clock and status in its
+    /// corners when there is no bar. Takes effect at the next
+    /// `apply_config`.
+    pub fn set_glance_allowed(&self, allowed: bool) {
+        self.0.glance_allowed.set(allowed);
     }
 
     /// Applies config values that affect the overlay.
@@ -444,7 +461,7 @@ impl Overlay {
         // Sizes set from code follow the size setting when it changes.
         inner.scroller.set_width_request(px(LIST_WIDTH));
         inner.detail_icon.set_pixel_size(px(48));
-        let show_glance = config.bar.position == BarPosition::None;
+        let show_glance = inner.glance_allowed.get() && config.bar.position == BarPosition::None;
         for corner in &inner.glance.corners {
             corner.set_visible(show_glance);
         }

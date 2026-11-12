@@ -7,6 +7,9 @@
 #   scripts/install-on-dusky.sh status       show what is in place
 #
 # Options for install:
+#   --launcher-only   use only Scuttle's launcher. Waybar, mako and the
+#                     rest of dusky stay exactly as they are, or are put
+#                     back if an earlier install turned them off
 #   --keep-waybar     leave Waybar running alongside Scuttle's bar
 #   --keep-mako       leave mako in charge of notifications
 #   --prefix DIR      install the binary under DIR/bin (default: ~/.local)
@@ -39,6 +42,7 @@ MARK='-- [scuttle] '
 ACTION=install
 KEEP_WAYBAR=0
 KEEP_MAKO=0
+LAUNCHER_ONLY=0
 SYSTEM=1
 PREFIX="$HOME/.local"
 BINARY=""
@@ -50,12 +54,13 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 while [ $# -gt 0 ]; do
     case "$1" in
         install | uninstall | status) ACTION="$1" ;;
+        --launcher-only) LAUNCHER_ONLY=1 ;;
         --keep-waybar) KEEP_WAYBAR=1 ;;
         --keep-mako) KEEP_MAKO=1 ;;
         --no-system) SYSTEM=0 ;;
         --prefix) PREFIX="${2:?--prefix needs a directory}"; shift ;;
         --binary) BINARY="${2:?--binary needs a file}"; shift ;;
-        -h | --help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h | --help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "Unknown option: $1 (try --help)" ;;
     esac
     shift
@@ -126,6 +131,21 @@ build_and_install_binary() {
 write_hyprland_file() {
     step "Writing $OURS"
     mkdir -p "$(dirname "$OURS")"
+    # In launcher-only mode Scuttle starts with everything but the
+    # launcher off, and there is no assistant to bind a key to.
+    local start_args="" assistant_bind=""
+    if [ "$LAUNCHER_ONLY" -eq 1 ]; then
+        start_args=' .. " --launcher-only"'
+    else
+        assistant_bind='
+-- The assistant panel. Super + / is free in dusky'"'"'s keybinds.
+hl.bind(
+    "SUPER + slash",
+    hl.dsp.exec_cmd(scuttle .. " toggle assistant"),
+    { description = "Scuttle assistant" }
+)
+'
+    fi
     cat > "$OURS" << EOF
 -- Scuttle on dusky. Written by Scuttle's scripts/install-on-dusky.sh.
 -- This file lives in dusky's edit_here folder, which dusky's updater
@@ -135,7 +155,7 @@ local scuttle = "$INSTALLED_BINARY"
 
 -- Start Scuttle with the session.
 hl.on("hyprland.start", function()
-    hl.exec_cmd(scuttle)
+    hl.exec_cmd(scuttle$start_args)
 end)
 
 -- Tap Super on its own to open the launcher. Super held with another
@@ -145,14 +165,7 @@ hl.bind(
     hl.dsp.exec_cmd(scuttle .. " toggle launcher"),
     { description = "Scuttle launcher", release = true }
 )
-
--- The assistant panel. Super + / is free in dusky's keybinds.
-hl.bind(
-    "SUPER + slash",
-    hl.dsp.exec_cmd(scuttle .. " toggle assistant"),
-    { description = "Scuttle assistant" }
-)
-
+$assistant_bind
 -- Blur what is behind Scuttle's translucent panels. no_anim turns off
 -- Hyprland's own open and close animation for them: Scuttle animates
 -- them itself, and the two together show as a rectangle growing behind
@@ -235,6 +248,32 @@ disable_mako() {
     pkill -x mako 2> /dev/null || true
 }
 
+# Puts back what a full install turned off: the Waybar autostart line
+# and the mako service. Does nothing where they were never touched.
+restore_waybar_and_mako() {
+    step "Restoring Waybar and mako"
+    if [ -f "$AUTOSTART" ] && grep -qF -- "$MARK" "$AUTOSTART"; then
+        sed -i -E "s|^([[:space:]]*)-- \[scuttle\] |\1|" "$AUTOSTART"
+        say "Restored the Waybar line in $AUTOSTART."
+    fi
+    if [ "$SYSTEM" -eq 1 ]; then
+        if [ -f "$STATE/mako-was-enabled" ]; then
+            systemctl --user enable --now mako.service || true
+            rm -f "$STATE/mako-was-enabled"
+            say "Enabled mako.service again."
+        fi
+        if running_in_hyprland; then
+            hyprctl reload > /dev/null 2>&1 || true
+            local toggle="$HOME/user_scripts/waybar/waybar_toggle.sh"
+            # Only if it is not already up, so a bar that was never
+            # turned off is left alone.
+            if [ -x "$toggle" ] && ! pgrep -x waybar > /dev/null 2>&1; then
+                setsid -f "$toggle" --on > /dev/null 2>&1 || true
+            fi
+        fi
+    fi
+}
+
 start_scuttle() {
     running_in_hyprland || {
         say "Not inside a running Hyprland session, so nothing was started. Scuttle starts at your next login."
@@ -244,7 +283,11 @@ start_scuttle() {
     hyprctl reload > /dev/null 2>&1 || true
     "$INSTALLED_BINARY" quit > /dev/null 2>&1 || true
     sleep 0.3
-    setsid -f "$INSTALLED_BINARY" > /dev/null 2>&1
+    if [ "$LAUNCHER_ONLY" -eq 1 ]; then
+        setsid -f "$INSTALLED_BINARY" --launcher-only > /dev/null 2>&1
+    else
+        setsid -f "$INSTALLED_BINARY" > /dev/null 2>&1
+    fi
     sleep 1
     if "$INSTALLED_BINARY" ping > /dev/null 2>&1; then
         say "Scuttle is running. Tap Super to open the launcher."
@@ -259,6 +302,17 @@ do_install() {
     install_dependencies
     build_and_install_binary
     write_hyprland_file
+    if [ "$LAUNCHER_ONLY" -eq 1 ]; then
+        # Nothing of dusky's is turned off. If an earlier full install
+        # turned Waybar and mako off, they come back.
+        restore_waybar_and_mako
+        start_scuttle
+        step "Done"
+        say "Only Scuttle's launcher is in use. Tap Super to open it."
+        say "Waybar, mako and your other keys are as dusky set them up."
+        say "To undo this: $ROOT/scripts/install-on-dusky.sh uninstall"
+        return 0
+    fi
     disable_waybar
     disable_mako
     start_scuttle
@@ -287,25 +341,7 @@ do_uninstall() {
         say "Removed the require line from $LOADER."
     fi
 
-    step "Restoring Waybar and mako"
-    if [ -f "$AUTOSTART" ] && grep -qF -- "$MARK" "$AUTOSTART"; then
-        sed -i -E "s|^([[:space:]]*)-- \[scuttle\] |\1|" "$AUTOSTART"
-        say "Restored the Waybar line in $AUTOSTART."
-    fi
-    if [ "$SYSTEM" -eq 1 ]; then
-        if [ -f "$STATE/mako-was-enabled" ]; then
-            systemctl --user enable --now mako.service || true
-            rm -f "$STATE/mako-was-enabled"
-            say "Enabled mako.service again."
-        fi
-        if running_in_hyprland; then
-            hyprctl reload > /dev/null 2>&1 || true
-            local toggle="$HOME/user_scripts/waybar/waybar_toggle.sh"
-            if [ -x "$toggle" ]; then
-                setsid -f "$toggle" --on > /dev/null 2>&1 || true
-            fi
-        fi
-    fi
+    restore_waybar_and_mako
 
     step "Done"
     say "The scuttle binary ($binary) and your settings in ~/.config/scuttle were left in place."

@@ -40,8 +40,20 @@ fn sound_when(setting: SoundWhen) -> When {
     }
 }
 
+/// Turns off everything but the launcher, whatever the config says.
+/// This is what `scuttle --launcher-only` runs with, for people who
+/// want the launcher beside another bar and notification daemon.
+pub fn launcher_only(mut config: Config) -> Config {
+    config.bar.position = scuttle_core::config::BarPosition::None;
+    config.notifications.enabled = false;
+    config.assistant.enabled = false;
+    config
+}
+
 pub struct Shell {
     app: gtk::Application,
+    /// Only the launcher runs. See [`launcher_only`].
+    launcher_only: bool,
     config_path: PathBuf,
     home: PathBuf,
     config: RefCell<Config>,
@@ -83,7 +95,11 @@ pub struct Shell {
 impl Shell {
     /// Builds the shell and starts everything. Returns an error message
     /// when the shell cannot start at all.
-    pub fn start(app: &gtk::Application, config_path: &Path) -> Result<Rc<Shell>, String> {
+    pub fn start(
+        app: &gtk::Application,
+        config_path: &Path,
+        only_launcher: bool,
+    ) -> Result<Rc<Shell>, String> {
         let Some(display) = gdk::Display::default() else {
             return Err(
                 "No Wayland display found. Scuttle has to be started inside a Wayland session."
@@ -118,6 +134,11 @@ impl Shell {
                 eprintln!("{e}\nStarting with the default settings instead.");
                 Config::default()
             }
+        };
+        let config = if only_launcher {
+            launcher_only(config)
+        } else {
+            config
         };
 
         let home = std::env::var_os("HOME")
@@ -160,6 +181,9 @@ impl Shell {
             hypr.clone(),
             Rc::clone(&feedback),
         );
+        // Beside another bar, the launcher has no need to show the
+        // clock and status itself.
+        overlay.set_glance_allowed(!only_launcher);
         overlay.apply_config(&config, on_battery);
         overlay.update_stats(&stats);
 
@@ -183,14 +207,20 @@ impl Shell {
             }
         }
 
+        // What is playing is shown on the bar, so with no bar there is
+        // nothing to watch players for.
         let media_tx = tx.clone();
-        let media = match scuttle_media::watch(move |track| {
-            let _ = media_tx.send_blocking(Msg::Media(track));
-        }) {
-            Ok(controller) => Some(controller),
-            Err(reason) => {
-                eprintln!("{reason}");
-                None
+        let media = if only_launcher {
+            None
+        } else {
+            match scuttle_media::watch(move |track| {
+                let _ = media_tx.send_blocking(Msg::Media(track));
+            }) {
+                Ok(controller) => Some(controller),
+                Err(reason) => {
+                    eprintln!("{reason}");
+                    None
+                }
             }
         };
 
@@ -205,6 +235,7 @@ impl Shell {
 
         let shell = Rc::new(Shell {
             app: app.clone(),
+            launcher_only: only_launcher,
             config_path: config_path.to_path_buf(),
             home,
             config: RefCell::new(config),
@@ -495,9 +526,13 @@ impl Shell {
     /// The assistant panel, or why there is none.
     fn panel(&self) -> Result<&Panel, Response> {
         self.assistant.as_ref().ok_or_else(|| Response::Error {
-            message: "The assistant is turned off. Set enabled = true under [assistant] in \
-                      config.toml and restart Scuttle."
-                .into(),
+            message: if self.launcher_only {
+                "Scuttle is running with --launcher-only, so there is no assistant panel.".into()
+            } else {
+                "The assistant is turned off. Set enabled = true under [assistant] in \
+                 config.toml and restart Scuttle."
+                    .into()
+            },
         })
     }
 
@@ -756,6 +791,7 @@ impl Shell {
             }
         };
         let new = match loaded {
+            Ok(new) if self.launcher_only => launcher_only(new),
             Ok(new) => new,
             Err(e) => {
                 let message = e.to_string();
@@ -910,5 +946,26 @@ impl Shell {
             });
         });
         *self.watcher.borrow_mut() = Some(monitor);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use scuttle_core::config::BarPosition;
+
+    #[test]
+    fn launcher_only_turns_off_everything_else_and_keeps_the_rest() {
+        let mut config = Config::default();
+        config.appearance.theme = "tide".into();
+        config.launcher.max_results = 12;
+        let only = launcher_only(config.clone());
+        assert_eq!(only.bar.position, BarPosition::None);
+        assert!(!only.notifications.enabled);
+        assert!(!only.assistant.enabled);
+        // The look and the launcher's own settings are untouched.
+        assert_eq!(only.appearance, config.appearance);
+        assert_eq!(only.launcher, config.launcher);
+        assert_eq!(only.sound, config.sound);
     }
 }

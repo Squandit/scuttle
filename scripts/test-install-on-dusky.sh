@@ -92,6 +92,24 @@ run "$HOME2" install --binary "$HOME2/bin/scuttle" --keep-waybar --keep-mako > /
 check "--keep-waybar leaves the Waybar line active" grep -qE '^    hl\.exec_cmd\("\$HOME/user_scripts/waybar/waybar_toggle.sh"\)' "$HOME2/.config/hypr/edit_here/source/autostart.lua"
 check "--keep-mako turns Scuttle's notifications off" grep -qF 'enabled = false' "$HOME2/.config/scuttle/config.toml"
 
+echo "Launcher only"
+HOME4="$WORK/four"
+make_home "$HOME4"
+BEFORE4="$(snapshot "$HOME4")"
+OURS4="$HOME4/.config/hypr/edit_here/source/scuttle.lua"
+AUTOSTART4="$HOME4/.config/hypr/edit_here/source/autostart.lua"
+# Start from a full install, as someone switching over would.
+run "$HOME4" install --binary "$HOME4/bin/scuttle" > /dev/null 2>&1
+check "the full install turned Waybar off first" grep -qF -- '-- [scuttle] hl.exec_cmd' "$AUTOSTART4"
+run "$HOME4" install --launcher-only --binary "$HOME4/bin/scuttle" > "$WORK/launcher.log" 2>&1 || { cat "$WORK/launcher.log"; fail "--launcher-only exits cleanly"; }
+check "--launcher-only starts Scuttle with only the launcher" grep -qF 'hl.exec_cmd(scuttle .. " --launcher-only")' "$OURS4"
+check "--launcher-only keeps the Super tap" grep -qF '" toggle launcher"' "$OURS4"
+check "--launcher-only binds no assistant key" bash -c "! grep -qF 'toggle assistant' '$OURS4'"
+check "--launcher-only puts the Waybar line back" grep -qE '^    hl\.exec_cmd\("\$HOME/user_scripts/waybar/waybar_toggle.sh"\)' "$AUTOSTART4"
+check "--launcher-only writes no Scuttle config" test ! -e "$HOME4/.config/scuttle/config.toml"
+run "$HOME4" uninstall > /dev/null 2>&1
+check "uninstalling from launcher-only restores every file" test "$BEFORE4" = "$(snapshot "$HOME4")"
+
 echo "Refuses a home that is not dusky"
 HOME3="$WORK/three"
 mkdir -p "$HOME3"
