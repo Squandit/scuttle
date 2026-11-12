@@ -81,10 +81,28 @@ pub fn line(key: &str, value: Option<&Value>) -> String {
 pub fn set(text: &str, key: &str, value: &Value) -> Result<String, String> {
     let (section, name) = split(key)?;
     let mut doc = parse(text)?;
+    if !doc.contains_key(section) {
+        // Comments at the end of the file belong above a section added
+        // after them, not below it. Without this, a file that is only
+        // a comment would have the comment pushed to the bottom.
+        let trailing = doc.trailing().as_str().unwrap_or("").to_string();
+        let mut table = Table::new();
+        if !trailing.trim().is_empty() {
+            let mut prefix = trailing;
+            if !prefix.ends_with('\n') {
+                prefix.push('\n');
+            }
+            if !doc.is_empty() || !prefix.ends_with("\n\n") {
+                prefix.push('\n');
+            }
+            table.decor_mut().set_prefix(prefix);
+            doc.set_trailing("");
+        }
+        doc.insert(section, Item::Table(table));
+    }
     let table = doc
-        .entry(section)
-        .or_insert_with(|| Item::Table(Table::new()))
-        .as_table_mut()
+        .get_mut(section)
+        .and_then(Item::as_table_mut)
         .ok_or_else(|| format!("[{section}] in the config file is not a table."))?;
     let mut new = value.to_toml();
     // Keep a comment that sits on the same line as the old value.
@@ -212,6 +230,32 @@ right = ["cpu", "memory"]
         let out = set(FILE, "sound.feedback", &s("always")).unwrap();
         assert!(out.starts_with(FILE), "{out}");
         assert!(out.ends_with("[sound]\nfeedback = \"always\"\n"), "{out}");
+    }
+
+    #[test]
+    fn comments_stay_above_a_section_added_after_them() {
+        // A file that is nothing but a comment.
+        assert_eq!(
+            set("# Mine.\n", "bar.position", &s("bottom")).unwrap(),
+            "# Mine.\n\n[bar]\nposition = \"bottom\"\n"
+        );
+        // Without a final newline.
+        assert_eq!(
+            set("# Mine.", "bar.position", &s("bottom")).unwrap(),
+            "# Mine.\n\n[bar]\nposition = \"bottom\"\n"
+        );
+        // A comment after the last section stays where it was, and the
+        // new section goes below it.
+        let file = "[bar]\nstyle = \"strip\"\n\n# Sound next.\n";
+        assert_eq!(
+            set(file, "sound.feedback", &s("always")).unwrap(),
+            "[bar]\nstyle = \"strip\"\n\n# Sound next.\n\n[sound]\nfeedback = \"always\"\n"
+        );
+        // Adding to a section that exists leaves trailing comments be.
+        assert_eq!(
+            set(file, "bar.height", &Value::Int(44)).unwrap(),
+            "[bar]\nstyle = \"strip\"\nheight = 44\n\n# Sound next.\n"
+        );
     }
 
     #[test]
