@@ -579,6 +579,43 @@ $stagger_rules
 .scuttle button.send:disabled { background-color: $wash_strong; color: $text_dim; }
 .scuttle button.send.stop { background-color: $wash_strong; color: $text; }
 
+/* ---- Tray ----------------------------------------------------------- */
+
+.tray-icon { padding: 3px; border-radius: $radius_xs; }
+.tray-icon:hover { background-color: $wash_strong; }
+.tray-icon.attention { background-color: $accent_soft; }
+
+.scuttle popover.tray-menu { background: none; }
+
+.scuttle popover.tray-menu > contents {
+  background-color: $surface;
+  color: $text;
+  border: 1px solid $line_strong;
+  border-radius: $radius_sm;
+  box-shadow: 0 8px 24px $shadow;
+  padding: 6px;
+}
+
+.scuttle popover.tray-menu > arrow { background: none; border: none; }
+
+.scuttle .tray-menu button {
+  padding: 7px 12px;
+  border-radius: $radius_xs;
+  font-size: 14px;
+  color: $text;
+}
+
+.scuttle .tray-menu button:hover,
+.scuttle .tray-menu button:focus-visible { background-color: $wash_strong; }
+.scuttle .tray-menu button:disabled { color: $text_dim; }
+.tray-menu .mark { color: $accent_text; }
+
+.tray-menu separator {
+  background-color: $line;
+  min-height: 1px;
+  margin: 5px 6px;
+}
+
 /* ---- Settings ------------------------------------------------------- */
 
 window.scuttle.settings { background-color: $ground; }

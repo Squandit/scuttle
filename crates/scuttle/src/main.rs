@@ -14,6 +14,7 @@ mod services;
 mod settings;
 mod shell;
 mod toasts;
+mod tray;
 
 use std::path::PathBuf;
 use std::process::ExitCode;

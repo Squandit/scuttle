@@ -30,6 +30,7 @@ use crate::overlay::Overlay;
 use crate::services::{self, SocketError};
 use crate::settings::Settings;
 use crate::toasts::Toasts;
+use crate::tray::TrayRequest;
 
 fn sound_when(setting: SoundWhen) -> When {
     match setting {
@@ -61,6 +62,10 @@ pub struct Shell {
     /// `None` when there is no D-Bus session to find players on.
     media: Option<Controller>,
     track: RefCell<Option<Track>>,
+    /// The system tray, once a bar has asked for one. `None` until
+    /// then, and when there is no D-Bus session.
+    tray: RefCell<Option<scuttle_tray::Tray>>,
+    tray_items: RefCell<Vec<scuttle_tray::Item>>,
     bars: RefCell<Vec<Bar>>,
     bars_hidden: Cell<bool>,
     desktop: RefCell<DesktopState>,
@@ -215,6 +220,8 @@ impl Shell {
             volume: Cell::new(None),
             media,
             track: RefCell::new(None),
+            tray: RefCell::new(None),
+            tray_items: RefCell::new(Vec::new()),
             bars: RefCell::new(Vec::new()),
             bars_hidden: Cell::new(false),
             desktop: RefCell::new(DesktopState::default()),
@@ -386,12 +393,86 @@ impl Shell {
                     toasts.apply(change);
                 }
             }
+            Msg::Tray(items) => {
+                for bar in self.bars.borrow().iter() {
+                    bar.update_tray(&items);
+                }
+                *self.tray_items.borrow_mut() = items;
+            }
+            Msg::TrayRequest(request) => self.tray_request(request),
+            Msg::TrayMenu { key, menu, entries } => {
+                if let Err(problem) = &entries {
+                    eprintln!("{problem}");
+                }
+                for bar in self.bars.borrow().iter() {
+                    bar.show_tray_menu(&key, &menu, entries.clone());
+                }
+            }
             Msg::Assistant(generation, msg) => {
                 if let Some(panel) = &self.assistant {
                     panel.handle(generation, msg);
                 }
             }
         }
+    }
+
+    /// Starts the system tray if the bar has a place for it and it is
+    /// not running yet. Scuttle only becomes the tray that apps
+    /// register with when the user has a tray to show them in.
+    fn start_tray(&self) {
+        let wanted = {
+            let config = self.config.borrow();
+            let bar = &config.bar;
+            bar.position != scuttle_core::config::BarPosition::None
+                && [&bar.left, &bar.center, &bar.right]
+                    .iter()
+                    .any(|modules| modules.contains(&scuttle_core::config::Module::Tray))
+        };
+        if !wanted || self.tray.borrow().is_some() {
+            return;
+        }
+        let tx = self.tx.clone();
+        match scuttle_tray::watch(move |items| {
+            let _ = tx.send_blocking(Msg::Tray(items));
+        }) {
+            Ok(tray) => *self.tray.borrow_mut() = Some(tray),
+            Err(reason) => eprintln!("{reason}"),
+        }
+    }
+
+    /// Passes something the user did to a tray icon on to its app.
+    /// The app may be slow to answer, so this happens on a thread of
+    /// its own and never holds up the bar.
+    fn tray_request(&self, request: TrayRequest) {
+        let Some(tray) = self.tray.borrow().clone() else {
+            return;
+        };
+        let tx = self.tx.clone();
+        std::thread::spawn(move || {
+            let outcome = match request {
+                TrayRequest::Activate { key } => tray.activate(&key, 0, 0),
+                TrayRequest::Secondary { key } => tray.secondary_activate(&key, 0, 0),
+                TrayRequest::Scroll {
+                    key,
+                    delta,
+                    horizontal,
+                } => tray.scroll(&key, delta, horizontal),
+                TrayRequest::MenuClick { key, menu, id } => tray.click_menu(&key, &menu, id),
+                // An app with no menu to describe draws its own.
+                TrayRequest::Menu { key, menu: None } => tray.context_menu(&key, 0, 0),
+                TrayRequest::Menu {
+                    key,
+                    menu: Some(menu),
+                } => {
+                    let entries = tray.menu(&key, &menu);
+                    let _ = tx.send_blocking(Msg::TrayMenu { key, menu, entries });
+                    Ok(())
+                }
+            };
+            if let Err(problem) = outcome {
+                eprintln!("{problem}");
+            }
+        });
     }
 
     /// The settings window, built on first use.
@@ -737,11 +818,17 @@ impl Shell {
                 bar.connect_volume_requested(move |change| {
                     let _ = tx.try_send(Msg::VolumeRequest(change));
                 });
+                bar.update_tray(&self.tray_items.borrow());
+                let tx = self.tx.clone();
+                bar.connect_tray_requested(move |request| {
+                    let _ = tx.try_send(Msg::TrayRequest(request));
+                });
                 bars.push(bar);
             }
         }
         *self.bars.borrow_mut() = bars;
         drop(config);
+        self.start_tray();
         self.update_badges();
     }
 

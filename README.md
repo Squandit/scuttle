@@ -10,7 +10,7 @@ Scuttle exists because most Hyprland setups are five separate tools glued togeth
 
 Scuttle is early. This is what is built and tested right now.
 
-**The bar.** Workspaces, the focused window's title, a clock, CPU load, memory use, network state and battery. It comes in three shapes: a full-width strip, three floating islands, or a small notch.
+**The bar.** Workspaces, the focused window's title, a clock, CPU load, memory use, network state, battery and the system tray. It comes in three shapes: a full-width strip, three floating islands, or a small notch.
 
 ![The three bar styles](docs/img/bars.png)
 
@@ -33,6 +33,8 @@ The battery widget only appears on machines that have a battery. A desktop PC ne
 ![Notification toasts under the bar](docs/img/notifications.png)
 
 **Now playing.** The bar shows the track from any player that supports MPRIS, which is nearly all of them: Spotify, Firefox and Chromium tabs, mpv, VLC and most music apps. Click to play or pause, scroll to skip. With several players open it shows the one that is playing. `scuttle media toggle`, `next` and `previous` do the same from the keyboard.
+
+**System tray.** Apps that live in the tray, such as Discord, Steam and network applets, show their icons on the bar. Click one for its main action, right-click for its menu, middle-click for its second action, and scroll for whatever the app does with scrolling. Menus are drawn by Scuttle, so they match everything else. If another bar is already running a tray, Scuttle shares it instead of fighting over it.
 
 **Volume and brightness.** `scuttle volume up`, `down` and `mute`, and `scuttle brightness up` and `down`, change the level and show a small popup with the result. Bind them to your media keys; `scuttle hyprland` prints the lines. The bar has a volume widget you can scroll on to change the level and click to mute. Volume goes through `wpctl` and never past 100%. Brightness goes through systemd-logind, so it needs no extra setup or root.
 
@@ -269,6 +271,7 @@ The code is a Cargo workspace:
 | `scuttle-sound` | Synthesised interface sounds, playback and headphone detection |
 | `scuttle-media` | Now playing and playback control over MPRIS |
 | `scuttle-notify` | The notification D-Bus service and the rules for showing and keeping notifications |
+| `scuttle-tray` | The system tray: the watcher apps register with, reading their icons and menus, and passing clicks back |
 | `scuttle-assistant` | The assistant: both ways of reaching Claude, the switch between them, actions, and running approved commands |
 | `scuttle` | The GTK shell and the `scuttle` command |
 

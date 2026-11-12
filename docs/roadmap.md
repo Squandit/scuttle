@@ -7,6 +7,7 @@ What is planned and not built yet, roughly in order. The README lists what works
 - **LiMusic.** The bar's media widget works with any MPRIS player. Check it against LiMusic on a real machine, and add whatever LiMusic needs if it does not speak MPRIS.
 - **Theme export without matugen.** Scuttle already matches the rest of the desktop through matugen in both directions. For setups without matugen, write Scuttle's own exporters for GTK, the common terminals, Hyprland borders and animation curves, and VS Code.
 - **Lock screen.**
+- **Tray extras.** Icons for apps that name an icon the theme does not have, and keyboard access to the tray.
 - **Settings extras.** Drag to reorder bar widgets instead of typing their names, a colour picker beside the accent box, and a font list.
 
 ## After that
@@ -15,7 +16,6 @@ What is planned and not built yet, roughly in order. The README lists what works
 - **Screen capture.** Region, window and screen; record; colour picker; annotate; send a region to the assistant.
 - **Keybind editor.** Searchable list, rebind by pressing keys, conflict check, an overlay cheatsheet.
 - **Launcher extras.** Inline controls in results (a brightness slider when you type "bright"), open windows listed under an app, notification history as a mode.
-- **Wallpaper-generated theme** as an option beside the hand-made ones.
 - **Per-monitor workspaces** on the bar for multi-monitor setups.
 
 ## Assistant extras

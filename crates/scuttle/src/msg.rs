@@ -62,6 +62,16 @@ pub enum Msg {
     MediaRequest(scuttle_media::Control),
     /// The volume widget on a bar was scrolled or clicked.
     VolumeRequest(scuttle_sys::audio::VolumeChange),
+    /// The icons in the system tray, in order.
+    Tray(Vec<scuttle_tray::Item>),
+    /// The user did something to a tray icon.
+    TrayRequest(crate::tray::TrayRequest),
+    /// A tray icon's menu arrived, or could not be fetched.
+    TrayMenu {
+        key: String,
+        menu: String,
+        entries: Result<Vec<scuttle_tray::MenuEntry>, String>,
+    },
     /// Something for the assistant panel, with the chat it belongs to.
     Assistant(u64, crate::assistant::AssistantMsg),
 }

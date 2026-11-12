@@ -91,10 +91,11 @@ pub const MODULES: &[&str] = &[
     "network",
     "volume",
     "battery",
+    "tray",
     "notifications",
 ];
 
-const MODULE_HELP: &str = "Widgets in order, separated by commas: workspaces, title, clock, media, cpu, memory, network, volume, battery, notifications.";
+const MODULE_HELP: &str = "Widgets in order, separated by commas: workspaces, title, clock, media, cpu, memory, network, volume, battery, tray, notifications.";
 
 pub const SECTIONS: &[Section] = &[
     Section {

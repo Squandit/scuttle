@@ -1618,6 +1618,7 @@ dependencies = [
  "scuttle-notify",
  "scuttle-sound",
  "scuttle-sys",
+ "scuttle-tray",
 ]
 
 [[package]]
@@ -1680,6 +1681,13 @@ dependencies = [
 [[package]]
 name = "scuttle-sys"
 version = "0.1.0"
+
+[[package]]
+name = "scuttle-tray"
+version = "0.1.0"
+dependencies = [
+ "zbus",
+]
 
 [[package]]
 name = "semver"

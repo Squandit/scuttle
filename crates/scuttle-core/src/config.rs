@@ -114,6 +114,8 @@ pub enum Module {
     Volume,
     /// Shown only on machines that have a battery.
     Battery,
+    /// Icons that apps put in the system tray.
+    Tray,
     Notifications,
 }
 
@@ -152,6 +154,7 @@ impl Default for Bar {
                 Module::Network,
                 Module::Volume,
                 Module::Battery,
+                Module::Tray,
                 Module::Notifications,
             ],
             clock_format: "%a %d %b   %H:%M".into(),

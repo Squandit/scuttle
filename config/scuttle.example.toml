@@ -47,16 +47,19 @@ height = 40
 # Gap between the bar and the screen edge in pixels, 0 to 64.
 margin = 10
 # Which modules go where. Available: "workspaces", "title", "clock",
-# "media", "cpu", "memory", "network", "volume", "battery",
+# "media", "cpu", "memory", "network", "volume", "battery", "tray",
 # "notifications". The battery module only appears on machines that have
 # a battery. "notifications" is a badge that appears when you have
 # unread notifications or "do not disturb" is on. "volume" shows the
 # output level: scroll on it to change it, click to mute. "media" shows
 # what is playing in any player that supports MPRIS (most do): click to
 # play or pause, scroll to skip. It hides when no player is running.
+# "tray" holds the icons apps such as Discord, Steam and network applets
+# put in the system tray. Click one for its main action, right-click
+# for its menu, scroll for whatever the app does with scrolling.
 left = ["workspaces", "title"]
 center = ["clock"]
-right = ["media", "cpu", "memory", "network", "volume", "battery", "notifications"]
+right = ["media", "cpu", "memory", "network", "volume", "battery", "tray", "notifications"]
 # strftime format. Add %S to show seconds.
 clock_format = "%a %d %b   %H:%M"
 # How many numbered workspaces are always shown, 1 to 20.

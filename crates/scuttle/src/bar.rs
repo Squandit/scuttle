@@ -16,6 +16,7 @@ use scuttle_sys::audio::{Volume, VolumeChange};
 
 use crate::msg::{DesktopState, Stats};
 use crate::scale::px;
+use crate::tray::{TrayRequest, TrayRow};
 
 /// Workspace buttons and the ids they currently show.
 struct Workspaces {
@@ -114,6 +115,7 @@ pub struct Bar {
     notifications: Option<gtk::Button>,
     volume: Option<(gtk::Box, gtk::Label)>,
     media: Option<(gtk::Box, gtk::Image, gtk::Label)>,
+    tray: Option<TrayRow>,
     /// The pending clock tick, shared with the timer that re-arms it.
     clock_timer: Option<ClockTimer>,
 }
@@ -166,6 +168,7 @@ impl Bar {
             notifications: None,
             volume: None,
             media: None,
+            tray: None,
             clock_timer: None,
         };
 
@@ -328,6 +331,12 @@ impl Bar {
                 self.volume = Some((row.clone(), value));
                 Some(row.upcast())
             }
+            Module::Tray => {
+                let tray = TrayRow::new(config.bar.position == BarPosition::Bottom);
+                let widget = tray.widget();
+                self.tray = Some(tray);
+                Some(widget)
+            }
             Module::Media => {
                 let row = gtk::Box::new(gtk::Orientation::Horizontal, px(7));
                 row.add_css_class("module");
@@ -414,6 +423,35 @@ impl Bar {
             gtk::glib::Propagation::Stop
         });
         row.add_controller(scroll);
+    }
+
+    /// Shows the icons apps have put in the tray.
+    pub fn update_tray(&self, items: &[scuttle_tray::Item]) {
+        if let Some(tray) = &self.tray {
+            tray.update(items);
+        }
+    }
+
+    /// Runs `callback` when the user does something to a tray icon.
+    pub fn connect_tray_requested(&self, callback: impl Fn(TrayRequest) + 'static) {
+        if let Some(tray) = &self.tray {
+            tray.connect_requested(callback);
+        }
+    }
+
+    /// Shows a tray icon's menu, if this is the bar it was asked for on.
+    pub fn show_tray_menu(
+        &self,
+        key: &str,
+        menu: &str,
+        entries: Result<Vec<scuttle_tray::MenuEntry>, String>,
+    ) {
+        if let Some(tray) = &self.tray {
+            match entries {
+                Ok(entries) => tray.show_menu(key, menu, entries),
+                Err(_) => tray.menu_failed(key),
+            }
+        }
     }
 
     /// Shows the output volume, or hides the widget when there is none.
@@ -520,6 +558,9 @@ impl Bar {
             .and_then(|slot| slot.borrow_mut().take())
         {
             id.remove();
+        }
+        if let Some(tray) = &self.tray {
+            tray.close();
         }
         self.window.close();
     }
