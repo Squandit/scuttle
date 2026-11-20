@@ -16,7 +16,7 @@ Scuttle is early. This is what is built and tested right now.
 
 The battery widget only appears on machines that have a battery. A desktop PC never shows it, and a wireless mouse reporting its own charge does not count.
 
-**The launcher.** One search box for apps, open windows, files, system actions, sums and the web. Results are grouped, the best group comes first, and what you use most rises to the top. Shut down, restart and log out ask for a second Enter before they run.
+**The launcher.** One search box for apps, open windows, files, system actions, sums and the web. Results are grouped, the best group comes first, and what you use most rises to the top. Apps show up as soon as they are installed, with no restart. Shut down, restart and log out ask for a second Enter before they run.
 
 **Themes.** Four built-in themes, each in dark and light: `ferris` (orange on warm charcoal, the default), `tide`, `dune` and `bone`. Set any accent colour you like and Scuttle picks text colours that stay readable on it.
 

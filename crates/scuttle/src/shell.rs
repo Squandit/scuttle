@@ -90,6 +90,9 @@ pub struct Shell {
     /// A handle to this shell for callbacks set up after start.
     this: RefCell<Weak<Shell>>,
     reload_pending: Cell<bool>,
+    /// Keeps the application folder watchers alive.
+    app_watchers: RefCell<Vec<gio::FileMonitor>>,
+    rescan_pending: Cell<bool>,
 }
 
 impl Shell {
@@ -262,6 +265,8 @@ impl Shell {
             palette_watcher: RefCell::new(None),
             this: RefCell::new(Weak::new()),
             reload_pending: Cell::new(false),
+            app_watchers: RefCell::new(Vec::new()),
+            rescan_pending: Cell::new(false),
         });
 
         shell.overlay.on_clipboard_wanted({
@@ -344,6 +349,7 @@ impl Shell {
         services::watch_stats(tx.clone());
         services::watch_volume(tx.clone());
         services::scan_apps(tx.clone());
+        shell.watch_apps();
         shell.index_files();
         shell.watch_config();
 
@@ -678,10 +684,15 @@ impl Shell {
                 }
                 Response::Ok
             }
-            Request::Reload => match self.reload() {
-                Ok(()) => Response::Ok,
-                Err(message) => Response::Error { message },
-            },
+            Request::Reload => {
+                // A manual reload also picks up apps added in folders
+                // the watchers missed.
+                services::scan_apps(self.tx.clone());
+                match self.reload() {
+                    Ok(()) => Response::Ok,
+                    Err(message) => Response::Error { message },
+                }
+            }
             Request::Quit => {
                 // Answer first, then stop.
                 let app = self.app.clone();
@@ -922,6 +933,40 @@ impl Shell {
         *self.palette_watcher.borrow_mut() = Some((path, monitor));
     }
 
+    /// Rescans applications when a `.desktop` file is added, changed or
+    /// removed, so new apps show in the launcher without a restart.
+    fn watch_apps(self: &Rc<Self>) {
+        let mut monitors = Vec::new();
+        for dir in paths::application_dirs() {
+            watch_tree(&dir, 0, &mut |path| {
+                let file = gio::File::for_path(path);
+                let Ok(monitor) =
+                    file.monitor_directory(gio::FileMonitorFlags::WATCH_MOVES, gio::Cancellable::NONE)
+                else {
+                    return;
+                };
+                let weak = Rc::downgrade(self);
+                monitor.connect_changed(move |_, _, _, _| {
+                    let Some(shell) = weak.upgrade() else { return };
+                    // Installs and update-desktop-database touch many
+                    // files at once: fold the burst into one scan.
+                    if shell.rescan_pending.replace(true) {
+                        return;
+                    }
+                    let weak = Rc::downgrade(&shell);
+                    glib::timeout_add_local_once(Duration::from_millis(300), move || {
+                        if let Some(shell) = weak.upgrade() {
+                            shell.rescan_pending.set(false);
+                            services::scan_apps(shell.tx.clone());
+                        }
+                    });
+                });
+                monitors.push(monitor);
+            });
+        }
+        *self.app_watchers.borrow_mut() = monitors;
+    }
+
     /// Reloads automatically when config.toml is saved.
     fn watch_config(self: &Rc<Self>) {
         let file = gio::File::for_path(&self.config_path);
@@ -946,6 +991,22 @@ impl Shell {
             });
         });
         *self.watcher.borrow_mut() = Some(monitor);
+    }
+}
+
+/// Calls `watch` for `dir` and the folders under it, as deep as the
+/// application scan looks.
+fn watch_tree(dir: &Path, depth: usize, watch: &mut dyn FnMut(&Path)) {
+    if depth > 3 || !dir.is_dir() {
+        return;
+    }
+    watch(dir);
+    let Ok(read) = std::fs::read_dir(dir) else { return };
+    for entry in read.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            watch_tree(&path, depth + 1, watch);
+        }
     }
 }
 
